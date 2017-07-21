@@ -1,0 +1,7 @@
+
+# Files
+*.pyc
+
+# Directories
+log
+png
