@@ -3,5 +3,7 @@
 *.pyc
 
 # Directories
+input
+output
 log
 png

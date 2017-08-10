@@ -1,77 +1,77 @@
-import nltk
-import pickle
+"""
+Build vocabulary file
+"""
+
+import os
+import json
 import argparse
+import h5py
+import numpy as np
+import string
 from collections import Counter
-from pycocotools.coco import COCO
 
+import logging
+from datetime import datetime
 
-class Vocabulary(object):
-    """Simple vocabulary wrapper."""
-    def __init__(self):
-        self.word2idx = {}
-        self.idx2word = {}
-        self.idx = 0
+logger = logging.getLogger(__name__)
 
-    def add_word(self, word):
-        if not word in self.word2idx:
-            self.word2idx[word] = self.idx
-            self.idx2word[self.idx] = word
-            self.idx += 1
+__UNK_TOKEN = 'UNK'
 
-    def __call__(self, word):
-        if not word in self.word2idx:
-            return self.word2idx['<unk>']
-        return self.word2idx[word]
+def build_vocab(videos, word_count_threshold):
 
-    def __len__(self):
-        return len(self.word2idx)
-
-def build_vocab(json, threshold):
-    """Build a simple vocabulary wrapper."""
-    coco = COCO(json)
+    # count up the number of words
     counter = Counter()
-    ids = coco.anns.keys()
-    for i, id in enumerate(ids):
-        caption = str(coco.anns[id]['caption'])
-        tokens = nltk.tokenize.word_tokenize(caption.lower())
-        counter.update(tokens)
+    for v in videos:
+        for tokens in v['processed_tokens']:
+            counter.update(tokens)
+    
+    cw = sorted([(count, w) for w, count in counter.iteritems()], reverse=True)
+    logger.info('Top words and their counts: \n %s', '\n'.join(map(str, cw[:20])))
 
-        if i % 1000 == 0:
-            print("[%d/%d] Tokenized the captions." %(i, len(ids)))
+    unknown_words = [w for w, n in counter.iteritems() if n < word_count_threshold]
+    unknown_count = sum(counter[w] for w in unknown_words)
+    total_count = sum(counter.itervalues())
 
-    # If the word frequency is less than 'threshold', then the word is discarded.
-    words = [word for word, cnt in counter.items() if cnt >= threshold]
+    special_words = [__UNK_TOKEN]
+    vocab = [w for w, n in counter.iteritems() if n >= word_count_threshold]
+    vocab.extend(special_words)
 
-    # Creates a vocab wrapper and add some special tokens.
-    vocab = Vocabulary()
-    vocab.add_word('<pad>')
-    vocab.add_word('<start>')
-    vocab.add_word('<end>')
-    vocab.add_word('<unk>')
-
-    # Adds the words to the vocabulary.
-    for i, word in enumerate(words):
-        vocab.add_word(word)
+    logger.info('Total words: %d', total_count)
+    logger.info('>> Number of unknown words: %d/%d = %.2f%%', len(unknown_words), len(counter), len(unknown_words) * 100.0 / len(counter))
+    logger.info('>> Number of words in vocab (including <unk>): %d', len(vocab))
+    logger.info('>> Number of UNKs: %d/%d = %.2f%%', unknown_count, total_count, unknown_count * 100.0 / total_count)
+    
     return vocab
 
-def main(args):
-    vocab = build_vocab(json=args.caption_path,
-                        threshold=args.threshold)
-    vocab_path = args.vocab_path
-    with open(vocab_path, 'wb') as f:
-        pickle.dump(vocab, f)
-    print("Total vocabulary size: %d" %len(vocab))
-    print("Saved the vocabulary wrapper to '%s'" %vocab_path)
+def main(input_json, output_json, word_count_threshold):
 
+    videos = json.load(open(input_json, 'r'))
 
-if __name__ == '__main__':
+    logger.info('Creating the vocab')
+    vocab = build_vocab(videos, word_count_threshold)
+                       
+    logger.info('Writing to %s', output_json)
+    json.dump(vocab, open(output_json, 'w'))
+    
+######################################################################    
+    
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(asctime)s:%(levelname)s: %(message)s')
     parser = argparse.ArgumentParser()
-    parser.add_argument('--caption_path', type=str, 
-                        default='/usr/share/mscoco/annotations/captions_train2014.json', 
-                        help='path for train annotation file')
-    parser.add_argument('--vocab_path', type=str, default='./data/vocab.pkl', 
-                        help='path for saving vocabulary wrapper')
-    parser.add_argument('--threshold', type=int, default=4, 
-                        help='minimum word count threshold')
+
+    parser.add_argument('input_json', type=str,
+                        help='%_proprocessedtokens.json')
+    parser.add_argument(
+        'output_json', default='_vocab.json', help='output vocab file')
+    
+    parser.add_argument('--word_count_threshold', default=0, type=int,
+                        help='only words that occur no less than this number of times will be put in vocab')
+
     args = parser.parse_args()
-    main(args)
+    logger.info('Input parameters: %s', args)
+    
+    start = datetime.now()
+    main(args.input_json, args.output_json, args.word_count_threshold)
+    
+    logger.info('Time: %s', datetime.now() - start)
