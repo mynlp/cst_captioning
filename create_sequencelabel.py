@@ -30,20 +30,18 @@ def encode_captions(videos, max_length, wtoi):
 
     label_arrays = []
     # note: these will be one-indexed
-    label_start_ix = np.zeros(N, dtype='uint32')
-    label_end_ix = np.zeros(N, dtype='uint32')
-    label_length = np.zeros(M, dtype='uint32')
-    caption_counter = 0
-    counter = 1
+    label_start_ix = np.zeros(N, dtype=int)
+    label_end_ix = np.zeros(N, dtype=int)
+    label_length = np.zeros(M, dtype=int)
+    counter = 0
     for i, v in enumerate(videos):
         n = len(v['final_captions'])
         assert n > 0, 'error: some image has no captions'
 
-        Li = np.zeros((n, max_length), dtype='uint32')
+        Li = np.zeros((n, max_length), dtype=int)
         for j, s in enumerate(v['final_captions']):
             # record the length of this sequence
-            label_length[caption_counter] = min(max_length, len(s))
-            caption_counter += 1
+            label_length[i] = min(max_length, len(s))
             for k, w in enumerate(s):
                 if k < max_length:
                     Li[j, k] = wtoi[w]
@@ -51,7 +49,7 @@ def encode_captions(videos, max_length, wtoi):
         # note: word indices are 1-indexed, and captions are padded with zeros
         label_arrays.append(Li)
         label_start_ix[i] = counter
-        label_end_ix[i] = counter + n - 1
+        label_end_ix[i] = counter + n
 
         counter += n
 
@@ -86,10 +84,10 @@ def main(vocab_json, captions_json, output_h5, max_length):
             L, label_start_ix, label_end_ix, label_length = encode_captions(
                 videos, max_length, wtoi)
             
-            of.create_dataset('labels', dtype='uint32', data=L)
-            of.create_dataset('label_start_ix', dtype='uint32', data=label_start_ix)
-            of.create_dataset('label_end_ix', dtype='uint32', data=label_end_ix)
-            of.create_dataset('label_length', dtype='uint32', data=label_length)
+            of.create_dataset('labels', dtype=int, data=L)
+            of.create_dataset('label_start_ix', dtype=int, data=label_start_ix)
+            of.create_dataset('label_end_ix', dtype=int, data=label_end_ix)
+            of.create_dataset('label_length', dtype=int, data=label_length)
         else:
             logger.info('Caption not found! Skipped encoding captions.')
                     
