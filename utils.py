@@ -2,7 +2,7 @@ import sys
 import os
 import json
 
-sys.path.append('tools/coco-caption')
+sys.path.append('coco-caption')
 from pycocotools.coco import COCO
 from pycocoevalcap.eval import COCOEvalCap
 
@@ -24,7 +24,12 @@ def decode_sequence(ix_to_word, seq):
         out.append(txt)
     return out
 
-def language_eval(gold_file, pred_file)
+def language_eval(gold_file, pred_file):
+    
+    # save the current stdout
+    temp = sys.stdout 
+    sys.stdout = open(os.devnull, 'w')
+
     coco = COCO(gold_file)
     cocoRes = coco.loadRes(pred_file)
     cocoEval = COCOEvalCap(coco, cocoRes)
@@ -33,6 +38,8 @@ def language_eval(gold_file, pred_file)
 
     out = {}
     for metric, score in cocoEval.eval.items():
-        out[metric] = round(score, 3)
+        out[metric] = round(score, 4)
 
+    # restore the previous stdout    
+    sys.stdout = temp
     return out

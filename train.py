@@ -7,20 +7,82 @@ import numpy as np
 import os
 import time
 import math
+import json
 
 import logging
 from datetime import datetime
 
 from dataloader import DataLoader
-import opts
 from model import CaptionModel, LanguageModelCriterion
 import utils
+import opts
 
 logger = logging.getLogger(__name__)
 
 import pdb
 
-def test(model, criterion, loader, opt):
+def train(model, criterion, optimizer, train_loader, val_loader, opt):
+    
+    infos = {'iter': 0, 
+             'epoch': 0, 
+             'best_scores': {},
+             'best_iters': {},
+             'best_epochs': {}
+            }
+    
+    checked = False
+    
+    while True:
+        t_start = time.time()
+        model.train()
+        data = train_loader.get_batch()
+        feats = [Variable(feat, volatile=False) for feat in data['feats']]
+        labels = Variable(data['labels'], volatile=False)
+        masks = Variable(data['masks'], volatile=False)
+        
+        if torch.cuda.is_available():
+            feats = [feat.cuda() for feat in feats]
+            labels = labels.cuda()
+            masks = masks.cuda()
+            
+        optimizer.zero_grad()
+        model.set_seq_per_img(train_loader.get_seq_per_img())
+        pred = model(feats, labels)
+        loss = criterion(pred, labels[:,1:], masks[:,1:])
+        loss.backward()
+        optimizer.step()
+        
+        if infos['iter'] % opt.print_log_interval == 0:
+            elapsed_time = time.time() - t_start
+            logger.info('Epoch %d, Iter %d: %f (%.3fs/iter)', 
+                        infos['epoch'], infos['iter'], loss.data[0], elapsed_time)
+        
+        if (infos['epoch'] >= opt.save_checkpoint_from and 
+            infos['epoch'] % opt.save_checkpoint_every == 0 and 
+            not checked):
+            # evaluate the validation performance
+            results = validate(model, criterion, val_loader, opt)
+            logger.info('Validation output: %s', json.dumps(results['scores'], indent=4))
+            infos.update(results['scores'])
+            
+            model_selection(model, opt, infos)
+            checked = True
+        
+        infos['iter'] += 1
+        
+        if infos['epoch'] < loader.get_current_epoch():
+            infos['epoch'] = loader.get_current_epoch()
+            checked = False
+        
+        if (infos['epoch'] - infos['best_epochs'].get(opt.eval_metrics[0], 0) > opt.max_patience) or \
+            (opt.max_epochs > 0 and infos['epoch'] >= opt.max_epochs) or \
+            (opt.max_iters > 0 and infos['iter'] > opt.max_iters):
+            logger.info('>>> Terminating...')
+            break
+            
+    return infos
+            
+def validate(model, criterion, loader, opt):
     loader.reset()
     model.eval()
     
@@ -51,7 +113,6 @@ def test(model, criterion, loader, opt):
             labels = labels.cuda()
             masks = masks.cuda()
         
-        #feats_ = [f.clone() for f in feats] 
         if loader.has_label:
             pred = model(feats, labels)
             loss = criterion(pred, labels[:,1:], masks[:,1:])
@@ -64,49 +125,92 @@ def test(model, criterion, loader, opt):
         for jj, sent in enumerate(sents):
             entry = {'image_id': data['ids'][jj], 'caption': sent}
             predictions.append(entry)
-            logger.debug('[%d] video %s: %s' %(jj, entry['image_id'], entry['caption']))
+            logger.debug('video %s: %s' %(entry['image_id'], entry['caption']))
                      
-    loss = loss_sum/num_iters
+    loss = round(loss_sum/num_iters, 4)
     results = {}
-    
     lang_stats = {}
     
-    if opt['language_eval'] == 1 and loader.hasLabel:
-        logger.info(' ==> language evaluating ...') 
-        coco_pred_json = os.path.join(opt.checkpoint_path, 
-                opt.id + '_coco_predictions.json')
-        json.dump(predictions, open(coco_pred_json, 'w'))
-        lang_stats = utils.language_eval(evalopt.gold_ann_file, coco_pred_json)
-        os.remove(coco_pred_json)
+    if opt.language_eval == 1 and loader.has_label:
+        logger.info('>>> Language evaluating ...') 
+        tmp_checkpoint_json = os.path.join(opt.checkpoint_path, 
+                opt.id + '_tmp_predictions.json')
+        json.dump(predictions, open(tmp_checkpoint_json, 'w'))
+        lang_stats = utils.language_eval(loader.gold_ann_file, tmp_checkpoint_json)
+        os.remove(tmp_checkpoint_json)
     
     results['predictions'] = predictions
-    results['loss'] = loss
-    results['lang_stats'] = lang_stats
+    results['scores']={'Loss': -loss}
+    results['scores'].update(lang_stats)
     
     return results
     
+def test(model, criterion, loader, opt, infos={}):
+    
+    for ii, eval_metric in enumerate(opt.eval_metrics):
+        if opt.test_only == 1:
+            checkpoint_pkl = os.path.join(opt.checkpoint_path, opt.id + '_' + eval_metric + '.pkl')
+            logger.info('Loading the best checkpoint: %s', checkpoint_pkl)
+            model.load_state_dict(torch.load(checkpoint_pkl))
+            
+        else:
+            logger.info('Best val %s score: %f. Best iter: %d. Best epoch: %d', eval_metric, 
+                        infos['best_scores'][eval_metric], 
+                        infos['best_iters'][eval_metric],
+                        infos['best_epochs'][eval_metric])
 
-def test_checkpoint(checkpoint_file, checkpoint_testpred_json):
-    pass
+        results = validate(model, criterion, loader, opt)
+        logger.info('Test output: %s', json.dumps(results['scores'], indent=4))
     
-def train(model, opt):
-    pass
-    
-def stopping():
-    pass
+        checkpoint_json = os.path.join(opt.checkpoint_path, 
+                                    opt.id + '_' + eval_metric + '_test_predictions.json')
+        
+        json.dump(results, open(checkpoint_json, 'w'))
+        logger.info('Wrote output caption to: %s ', checkpoint_json)
 
-def model_selection():
-    pass
+def model_selection(model, opt, infos):
     
+    for ii, eval_metric in enumerate(opt.eval_metrics):
+        if eval_metric == 'MSRVTT':
+            current_score = infos['Bleu_4'] + infos['METEOR'] + infos['ROUGE_L'] + infos['CIDEr']
+        else:
+            current_score = infos[eval_metric]
+        
+        # write the full model checkpoint as well if we did better than ever
+        if current_score > infos['best_scores'].get(eval_metric, float('-inf')):
+            infos['best_scores'][eval_metric] = current_score
+            infos['best_iters'][eval_metric] = infos['iter']
+            infos['best_epochs'][eval_metric] = infos['epoch']
+
+            logger.info('>>> Found new best [%s] score: %f, at iter: %d, epoch %d', 
+                        eval_metric, current_score, infos['iter'], infos['epoch'])
+            checkpoint_pkl = os.path.join(opt.checkpoint_path, opt.id + '_' + eval_metric + '.pkl')
+            torch.save(model.state_dict(), checkpoint_pkl)               
+            logger.info('Wrote checkpoint to: %s', checkpoint_pkl)
+            
+            checkpoint_json = os.path.join(opt.checkpoint_path, 
+                                    opt.id + '_' + eval_metric + '_val_predictions.json')
+            json.dump(infos, open(checkpoint_json, 'w'))
+            logger.info('Wrote output captions to: %s', checkpoint_json)
+        else:
+            logger.info('>>> Current best [%s] score: %f, at iter %d, epoch %d', 
+                    eval_metric, infos['best_scores'][eval_metric], 
+                        infos['best_iters'][eval_metric], 
+                        infos['best_epochs'][eval_metric])
+        
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG,
-                        format='%(asctime)s:%(levelname)s: %(message)s')
+    
     opt = opts.parse_opts()
+    
+    logging.basicConfig(level=getattr(logging, opt.loglevel.upper()),
+                        format='%(asctime)s:%(levelname)s: %(message)s')
+    
     logger.info('Input arguments: %s', opt)
     
     train_opt = {'label_h5': opt.train_label_h5, 
         'batch_size': opt.batch_size,
         'feat_h5': opt.train_feat_h5,
+        'gold_ann_file': opt.train_gold_ann_file,
         'seq_per_img': opt.train_seq_per_img,
         'num_chunks': opt.num_chunks,
         'mode': 'train'
@@ -116,6 +220,7 @@ if __name__ == '__main__':
     val_opt = {'label_h5': opt.val_label_h5, 
         'batch_size': opt.test_batch_size,
         'feat_h5': opt.val_feat_h5,
+        'gold_ann_file': opt.val_gold_ann_file,
         'seq_per_img': opt.test_seq_per_img,
         'num_chunks': opt.num_chunks,
         'mode': 'test'
@@ -125,6 +230,7 @@ if __name__ == '__main__':
     test_opt = {'label_h5': opt.test_label_h5, 
         'batch_size': opt.test_batch_size,
         'feat_h5': opt.test_feat_h5,
+        'gold_ann_file': opt.test_gold_ann_file,
         'seq_per_img': opt.test_seq_per_img,
         'num_chunks': opt.num_chunks,
         'mode': 'test'
@@ -135,67 +241,24 @@ if __name__ == '__main__':
     opt.seq_length = train_loader.get_seq_length()
     opt.feat_dims = train_loader.get_feat_dims()
     
-    logger.info('Loading model...')
+    logger.info('Building model...')
     model = CaptionModel(opt)
-    model.cuda()
-    
     criterion = LanguageModelCriterion()
-    optimizer = optim.Adam(model.parameters(), lr=opt.learning_rate)
     
-    iter = 0
-    epoch = 0
-    checkpoint_checked = False
-    val_loss_history = {}
-    val_lang_stats_history = {}
+    # Set the random seed manually for reproducibility.
+    torch.manual_seed(opt.seed)
+    if torch.cuda.is_available():
+        model.cuda()
+        criterion.cuda()
     
-    while True:
-        t_start = time.time()
-        model.train()
-        data = train_loader.get_batch()
-        feats = [Variable(feat, volatile=False) for feat in data['feats']]
-        labels = Variable(data['labels'], volatile=False)
-        masks = Variable(data['masks'], volatile=False)
+    if opt.test_only == 1:
+        test(model, criterion, test_loader, opt)
         
-        if torch.cuda.is_available():
-            feats = [feat.cuda() for feat in feats]
-            labels = labels.cuda()
-            masks = masks.cuda()
+    else:    
+        if not os.path.exists(opt.checkpoint_path):
+            os.makedirs(opt.checkpoint_path)
             
-        optimizer.zero_grad()
-        model.set_seq_per_img(train_loader.get_seq_per_img())
-        pred = model(feats, labels)
-        loss = criterion(pred, labels[:,1:], masks[:,1:])
-        loss.backward()
-        optimizer.step()
+        optimizer = optim.Adam(model.parameters(), lr=opt.learning_rate)
+        infos = train(model, criterion, optimizer, train_loader, val_loader, opt)
+        test(model, criterion, test_loader, opt, infos)
         
-        if iter % opt.print_log_interval == 0:
-            elapsed_time = time.time() - t_start
-            logger.info('Epoch %d, Iter %d: %f (%.3fs/iter)', epoch, iter, loss.data[0], elapsed_time)
-        
-        # save checkpoint once in a while (or on final iteration)
-        if epoch >= opt.save_checkpoint_from and epoch % opt.save_checkpoint_every == 0 and not checkpoint_checked:
-
-            # evaluate the validation performance
-            results = test(model, criterion, val_loader, opt)
-            val_loss = results['loss']
-
-            logger.info('Validation loss: %f', val_loss)
-            #logger.info('Caption perplexity: %f', results['cap_perp'])
-
-            if results['lang_stats']:
-                logger.info('Validation lang_stats: %s', results['lang_stats'])      
-                val_lang_stats_history[iter] = results['lang_stats']
-            
-            #json.dump(checkpoint, open(checkpoint_traininfo_json, 'w'))
-            #logger.info('Wrote json checkpoint to: %s', checkpoint_traininfo_json)
-
-            #stats = results['lang_stats'] 
-            #stats['Loss'] = -val_loss
-            #model_selection(stats, results['predictions'])
-            checkpoint_checked = True
-        
-        iter += 1
-        
-        if epoch < train_loader.get_current_epoch():
-            epoch = train_loader.get_current_epoch()
-            checkpoint_checked = False

@@ -4,6 +4,7 @@ IN_DIR=input
 OUT_DIR=output
 META_DIR=$(OUT_DIR)/metadata
 FEAT_DIR=$(OUT_DIR)/feature
+MODEL_DIR=$(OUT_DIR)/model
 
 MSRVTT2016_DIR=$(IN_DIR)/msrvtt2016
 MSRVTT2017_DIR=$(IN_DIR)/msrvtt2017
@@ -25,7 +26,6 @@ TRAIN_SPLIT?=train
 VAL_SPLIT?=val
 TEST_SPLIT?=test
 DATA_ID=$(TRAIN_DATASET)$(TRAIN_SPLIT)_$(VAL_DATASET)$(VAL_SPLIT)_$(TEST_DATASET)$(TEST_SPLIT)
-TRAIN_DATA_ID=$(TRAIN_DATASET)$(TRAIN_SPLIT)_$(VAL_DATASET)$(VAL_SPLIT)
 
 LEARNING_RATE?=0.001
 BATCH_SIZE?=64
@@ -36,7 +36,7 @@ RNN_SIZE?=512
 TEST_ONLY?=0
 
 MAX_PATIENCE?=20 # FOR EARLY STOPPING
-SAVE_CHECKPOINT_FROM=10
+SAVE_CHECKPOINT_FROM=1
 FEAT_SET=c3d
 
 MAX_ITERS?=20000
@@ -51,8 +51,8 @@ ATTENTION_TYPE?=B
 BEAM_SIZE?=5
 ALIGN_TYPE?=manet2
 
-TODAY=20170714
-VER?=exp_$(DATASET)_$(TODAY)_$(COMBINATION_TYPE)_$(ATTENTION_TYPE)_$(ALIGN_TYPE)
+TODAY=20170821
+EXP_NAME?=exp_$(DATASET)_$(TODAY)_$(COMBINATION_TYPE)_$(ATTENTION_TYPE)_$(ALIGN_TYPE)
 VAL_LANG_EVAL?=1
 TEST_LANG_EVAL?=1
 COMPARE_PPL?=1
@@ -70,7 +70,7 @@ FEAT4?=category
 FEAT5?=vgg16
 FEAT6?=vgg19
 
-TRAIN_ID=$(TRAIN_DATA_ID)_$(NUM_CHUNKS)_$(USE_ATTENTION)_$(BATCH_SIZE)_$(LEARNING_RATE)_ss$(USE_SS)_robust$(USE_ROBUST)_resume$(RESUME)
+TRAIN_ID=$(DATA_ID)_$(NUM_CHUNKS)_$(USE_ATTENTION)_$(BATCH_SIZE)_$(LEARNING_RATE)_ss$(USE_SS)_robust$(USE_ROBUST)_resume$(RESUME)
 
 ##########################################################################
 
@@ -105,6 +105,7 @@ convert_datainfo2cocofmt: $(foreach s,$(SPLITS),$(patsubst %,$(META_DIR)/%_$(s)_
 train_single: $(patsubst %,train_single_%,$(FEAT_SET))
 train_single_%: $(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
 	$(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_%_$(POOLING)$(NUM_CHUNKS).h5 \
+	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_cocofmt.json \
 	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_sequencelabel.h5 \
 	$(FEAT_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_%_$(POOLING)$(NUM_CHUNKS).h5 \
 	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_cocofmt.json \
@@ -114,18 +115,17 @@ train_single_%: $(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
 	CUDA_VISIBLE_DEVICES=$(GID) python train.py \
 		--train_label_h5 $(word 1,$^) \
 		--train_feat_h5 $(word 2,$^) \
-		--val_label_h5 $(word 3,$^) \
-		--val_feat_h5 $(word 4,$^) \
-		--val_gold_ann_file $(word 5,$^) \
-		--test_label_h5 $(word 6,$^) \
-		--test_feat_h5 $(word 7,$^) \
-		--test_gold_ann_file $(word 8,$^) \
-		--beam_size $(BEAM_SIZE) --max_patience $(MAX_PATIENCE) --compare_ppl $(COMPARE_PPL) \
-		--use_ss $(USE_SS) --use_robust $(USE_ROBUST) \
-		--language_eval $(VAL_LANG_EVAL) --checkpoint_path $(MODEL_DIR)/$(VER) --max_iters $(MAX_ITERS) --rnn_size $(RNN_SIZE) \
+		--train_gold_ann_file $(word 3,$^) \
+		--val_label_h5 $(word 4,$^) \
+		--val_feat_h5 $(word 5,$^) \
+		--val_gold_ann_file $(word 6,$^) \
+		--test_label_h5 $(word 7,$^) \
+		--test_feat_h5 $(word 8,$^) \
+		--test_gold_ann_file $(word 9,$^) \
+		--beam_size $(BEAM_SIZE) --max_patience $(MAX_PATIENCE) --compare_ppl $(COMPARE_PPL) --eval_metrics Loss \
+		--language_eval $(VAL_LANG_EVAL) --checkpoint_path $(MODEL_DIR)/$(EXP_NAME) --max_iters $(MAX_ITERS) --rnn_size $(RNN_SIZE) \
 		--train_seq_per_img $(TRAIN_SEQ_PER_IMG) --test_seq_per_img $(TEST_SEQ_PER_IMG) \
 		--batch_size $(BATCH_SIZE) --test_batch_size $(TEST_BATCH_SIZE) --learning_rate $(LEARNING_RATE) \
-		--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) --debug $(DEBUG) --combination_type $(COMBINATION_TYPE)\
+		--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) --debug $(DEBUG) --combination_type $(COMBINATION_TYPE) \
 		--use_attention $(USE_ATTENTION) --att_type $(ATTENTION_TYPE) --align_type $(ALIGN_TYPE) --output_attention $(OUTPUT_ATTENTION) \
-		--val_id $(VAL_DATASET)$(VAL_SPLIT) --test_id $(TEST_DATASET)$(TEST_SPLIT) --id $*_$(TRAIN_ID) \
-		--test_only $(TEST_ONLY) --resume $(RESUME) 
+		--id $*_$(TRAIN_ID) --test_only $(TEST_ONLY) --resume $(RESUME) 

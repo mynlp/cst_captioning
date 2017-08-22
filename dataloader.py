@@ -27,6 +27,7 @@ class DataLoader():
         self.word_embedding_size = opt.get('word_embedding_size', 512)
         self.num_chunks = opt.get('num_chunks', 1)
         self.mode = opt.get('mode', 'train')
+        self.gold_ann_file = opt.get('gold_ann_file', None)
         
         # open the hdf5 info file
         logger.info('DataLoader loading h5 file: %s', opt['label_h5'])
@@ -86,11 +87,11 @@ class DataLoader():
 
         for ii in range(self.batch_size):
             idx = self.index[counter]
-            video_id = self.videos[idx]
+            video_id = int(self.videos[idx])
             videoids_batch.append(video_id)
 
             for jj in range(self.num_feats):
-                video_batch[jj][ii] = torch.from_numpy(np.array(self.feat_h5[jj][video_id]))
+                video_batch[jj][ii] = torch.from_numpy(np.array(self.feat_h5[jj][str(video_id)]))
             
             if self.has_label:
                 # fetch the sequence labels
@@ -180,3 +181,6 @@ class DataLoader():
     
     def shuffle_videos(self):
         np.random.shuffle(self.index)
+    
+    def get_gold_ann_file(self):
+        return self.gold_ann_file

@@ -12,6 +12,7 @@ def parse_opts():
     parser.add_argument('--val_feat_h5', type=str, help='path to the h5 file containing extracted features')
     parser.add_argument('--test_feat_h5', type=str, help='path to the h5 file containing extracted features')
 
+    parser.add_argument('--train_gold_ann_file', type=str, help='Gold ann file, path relative to the coco-caption root')
     parser.add_argument('--val_gold_ann_file', type=str, help='Gold ann file, path relative to the coco-caption root')
     parser.add_argument('--test_gold_ann_file', type=str, help='Gold ann file, path relative to the coco-caption root')
     
@@ -53,10 +54,11 @@ def parse_opts():
     parser.add_argument('--save_checkpoint_decay', type=int, default=200, help='how often to save a model checkpoint?')
     parser.add_argument('--checkpoint_path', type=str, default='output/model', help='folder to save checkpoints into (empty = this folder)')
     parser.add_argument('--language_eval', type=int, default=1, help='Evaluate language as well (1 = yes, 0 = no)? BLEU/CIDEr/METEOR/ROUGE_L? requires coco-caption code from Github.')
+    parser.add_argument('--eval_metrics', default=['Loss'], nargs='+', choices=['Loss', 'Bleu_4', 'METEOR', 'ROUGE_L', 'CIDEr', 'MSRVTT'], help='Evaluation metrics')
     parser.add_argument('--test_language_eval', type=int, default=1, help='Evaluate language as well (1 = yes, 0 = no)? BLEU/CIDEr/METEOR/ROUGE_L? requires coco-caption code from Github.')
     
     parser.add_argument('--print_log_interval', type=int, default=20, help='How often do we snapshot losses, for inclusion in the progress dump? (0 = disable)')
-    parser.add_argument('--verbose', type=int, default=1)
+    parser.add_argument('--loglevel', type=str, default='INFO', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'])
     
     ## misc
     parser.add_argument('--backend', type=str, default='cudnn', help='nn|cudnn')
