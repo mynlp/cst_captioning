@@ -7,3 +7,5 @@ input
 output
 log
 png
+coco-caption
+.ipynb_checkpoints

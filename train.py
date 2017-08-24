@@ -13,7 +13,7 @@ import logging
 from datetime import datetime
 
 from dataloader import DataLoader
-from model import CaptionModel, LanguageModelCriterion
+from model import CaptionModel, ConcatCaptionModel, LanguageModelCriterion
 import utils
 import opts
 
@@ -65,26 +65,26 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt):
             logger.info('Validation output: %s', json.dumps(results['scores'], indent=4))
             infos.update(results['scores'])
             
-            model_selection(model, opt, infos)
+            check_model(model, opt, infos)
             checked = True
         
         infos['iter'] += 1
         
-        if infos['epoch'] < loader.get_current_epoch():
-            infos['epoch'] = loader.get_current_epoch()
+        if infos['epoch'] < train_loader.get_current_epoch():
+            infos['epoch'] = train_loader.get_current_epoch()
             checked = False
         
-        if (infos['epoch'] - infos['best_epochs'].get(opt.eval_metrics[0], 0) > opt.max_patience) or \
-            (opt.max_epochs > 0 and infos['epoch'] >= opt.max_epochs) or \
-            (opt.max_iters > 0 and infos['iter'] > opt.max_iters):
+        if infos['epoch'] - infos['best_epochs'].get(opt.eval_metrics[0], 0) > opt.max_patience or \
+            infos['epoch'] >= opt.max_epochs or \
+            infos['iter'] >= opt.max_iters:
             logger.info('>>> Terminating...')
             break
             
     return infos
             
 def validate(model, criterion, loader, opt):
-    loader.reset()
     model.eval()
+    loader.reset()
     
     num_videos = loader.get_num_videos()
     batch_size = loader.get_batch_size()
@@ -118,8 +118,7 @@ def validate(model, criterion, loader, opt):
             loss = criterion(pred, labels[:,1:], masks[:,1:])
             loss_sum += loss.data[0]
         
-        #seq, _ = model.sample(feats, {'beam_size': opt.beam_size})
-        seq, _ = model.sample(feats)
+        seq, _ = model.sample(feats, {'beam_size': opt.beam_size})
         sents = utils.decode_sequence(loader.get_vocab(), seq)
         
         for jj, sent in enumerate(sents):
@@ -127,7 +126,7 @@ def validate(model, criterion, loader, opt):
             predictions.append(entry)
             logger.debug('video %s: %s' %(entry['image_id'], entry['caption']))
                      
-    loss = round(loss_sum/num_iters, 4)
+    loss = round(loss_sum/num_iters, 3)
     results = {}
     lang_stats = {}
     
@@ -150,7 +149,7 @@ def test(model, criterion, loader, opt, infos={}):
     for ii, eval_metric in enumerate(opt.eval_metrics):
         if opt.test_only == 1:
             checkpoint_pkl = os.path.join(opt.checkpoint_path, opt.id + '_' + eval_metric + '.pkl')
-            logger.info('Loading the best checkpoint: %s', checkpoint_pkl)
+            logger.info('Loading checkpoint: %s', checkpoint_pkl)
             model.load_state_dict(torch.load(checkpoint_pkl))
             
         else:
@@ -168,7 +167,7 @@ def test(model, criterion, loader, opt, infos={}):
         json.dump(results, open(checkpoint_json, 'w'))
         logger.info('Wrote output caption to: %s ', checkpoint_json)
 
-def model_selection(model, opt, infos):
+def check_model(model, opt, infos):
     
     for ii, eval_metric in enumerate(opt.eval_metrics):
         if eval_metric == 'MSRVTT':
@@ -201,11 +200,14 @@ def model_selection(model, opt, infos):
 if __name__ == '__main__':
     
     opt = opts.parse_opts()
-    
+
     logging.basicConfig(level=getattr(logging, opt.loglevel.upper()),
                         format='%(asctime)s:%(levelname)s: %(message)s')
     
-    logger.info('Input arguments: %s', opt)
+    logger.info('Input arguments: %s', json.dumps(vars(opt), sort_keys=True, indent=4))
+    
+    # Set the random seed manually for reproducibility.
+    torch.cuda.manual_seed(opt.seed)
     
     train_opt = {'label_h5': opt.train_label_h5, 
         'batch_size': opt.batch_size,
@@ -215,7 +217,6 @@ if __name__ == '__main__':
         'num_chunks': opt.num_chunks,
         'mode': 'train'
     }
-    train_loader = DataLoader(train_opt)
     
     val_opt = {'label_h5': opt.val_label_h5, 
         'batch_size': opt.test_batch_size,
@@ -225,7 +226,6 @@ if __name__ == '__main__':
         'num_chunks': opt.num_chunks,
         'mode': 'test'
     }
-    val_loader = DataLoader(val_opt)
     
     test_opt = {'label_h5': opt.test_label_h5, 
         'batch_size': opt.test_batch_size,
@@ -235,6 +235,9 @@ if __name__ == '__main__':
         'num_chunks': opt.num_chunks,
         'mode': 'test'
     }
+                
+    train_loader = DataLoader(train_opt)
+    val_loader = DataLoader(val_opt)
     test_loader = DataLoader(test_opt)
     
     opt.vocab_size = train_loader.get_vocab_size()
@@ -242,11 +245,9 @@ if __name__ == '__main__':
     opt.feat_dims = train_loader.get_feat_dims()
     
     logger.info('Building model...')
-    model = CaptionModel(opt)
+    model = ConcatCaptionModel(opt)
     criterion = LanguageModelCriterion()
     
-    # Set the random seed manually for reproducibility.
-    torch.manual_seed(opt.seed)
     if torch.cuda.is_available():
         model.cuda()
         criterion.cuda()

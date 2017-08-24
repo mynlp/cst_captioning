@@ -40,7 +40,7 @@ class DataLoader():
         self.index = range(self.num_videos)
 
         #load the json file which contains additional information about the dataset
-        feat_h5_files = opt['feat_h5'].split('+')
+        feat_h5_files = opt['feat_h5']
         logger.info('DataLoader loading h5 files: %s', feat_h5_files)
         self.feat_h5 = []
         self.feat_dims = []
