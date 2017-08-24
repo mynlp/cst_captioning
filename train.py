@@ -62,7 +62,7 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt):
             not checked):
             # evaluate the validation performance
             results = validate(model, criterion, val_loader, opt)
-            logger.info('Validation output: %s', json.dumps(results['scores'], indent=4))
+            logger.info('Validation output: %s', json.dumps(results['scores'], indent=4, sort_keys=True))
             infos.update(results['scores'])
             
             check_model(model, opt, infos)
@@ -135,7 +135,7 @@ def validate(model, criterion, loader, opt):
         tmp_checkpoint_json = os.path.join(opt.checkpoint_path, 
                 opt.id + '_tmp_predictions.json')
         json.dump(predictions, open(tmp_checkpoint_json, 'w'))
-        lang_stats = utils.language_eval(loader.gold_ann_file, tmp_checkpoint_json)
+        lang_stats = utils.language_eval(loader.cocofmt_file, tmp_checkpoint_json)
         os.remove(tmp_checkpoint_json)
     
     results['predictions'] = predictions
@@ -207,12 +207,15 @@ if __name__ == '__main__':
     logger.info('Input arguments: %s', json.dumps(vars(opt), sort_keys=True, indent=4))
     
     # Set the random seed manually for reproducibility.
-    torch.cuda.manual_seed(opt.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(opt.seed)
+    else:
+        torch.manual_seed(opt.seed)
     
     train_opt = {'label_h5': opt.train_label_h5, 
         'batch_size': opt.batch_size,
         'feat_h5': opt.train_feat_h5,
-        'gold_ann_file': opt.train_gold_ann_file,
+        'cocofmt_file': opt.train_cocofmt_file,
         'seq_per_img': opt.train_seq_per_img,
         'num_chunks': opt.num_chunks,
         'mode': 'train'
@@ -221,7 +224,7 @@ if __name__ == '__main__':
     val_opt = {'label_h5': opt.val_label_h5, 
         'batch_size': opt.test_batch_size,
         'feat_h5': opt.val_feat_h5,
-        'gold_ann_file': opt.val_gold_ann_file,
+        'cocofmt_file': opt.val_cocofmt_file,
         'seq_per_img': opt.test_seq_per_img,
         'num_chunks': opt.num_chunks,
         'mode': 'test'
@@ -230,7 +233,7 @@ if __name__ == '__main__':
     test_opt = {'label_h5': opt.test_label_h5, 
         'batch_size': opt.test_batch_size,
         'feat_h5': opt.test_feat_h5,
-        'gold_ann_file': opt.test_gold_ann_file,
+        'cocofmt_file': opt.test_cocofmt_file,
         'seq_per_img': opt.test_seq_per_img,
         'num_chunks': opt.num_chunks,
         'mode': 'test'

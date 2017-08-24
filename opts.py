@@ -12,9 +12,9 @@ def parse_opts():
     parser.add_argument('--val_feat_h5', type=str, nargs='+', help='path to the h5 file containing extracted features')
     parser.add_argument('--test_feat_h5', type=str, nargs='+', help='path to the h5 file containing extracted features')
 
-    parser.add_argument('--train_gold_ann_file', type=str, help='Gold ann file, path relative to the coco-caption root')
-    parser.add_argument('--val_gold_ann_file', type=str, help='Gold ann file, path relative to the coco-caption root')
-    parser.add_argument('--test_gold_ann_file', type=str, help='Gold ann file, path relative to the coco-caption root')
+    parser.add_argument('--train_cocofmt_file', type=str, help='Gold captions in MSCOCO format to cal language metrics')
+    parser.add_argument('--val_cocofmt_file', type=str, help='Gold captions in MSCOCO format to cal language metrics')
+    parser.add_argument('--test_cocofmt_file', type=str, help='Gold captions in MSCOCO format to cal language metrics')
     
     # Optimization: General
     parser.add_argument('--max_patience', type=int, default=50, help='max number of epoch to run since the minima is detected -- early stopping')
@@ -47,8 +47,7 @@ def parse_opts():
     parser.add_argument('--num_test_videos', type=int, default=-1, help='how many videos to use when periodically evaluating the validation loss? (-1 = all)')
     parser.add_argument('--save_checkpoint_from', type=int, default=20, help='Start saving checkpoint from this epoch')
     parser.add_argument('--save_checkpoint_every', type=int, default=5, help='how often to save a model checkpoint in epochs?')
-    parser.add_argument('--save_checkpoint_decay_start', type=int, default=-1, help='--1: do not decrease. otherwise, decrease after this number')
-    parser.add_argument('--save_checkpoint_decay', type=int, default=200, help='how often to save a model checkpoint?')
+    
     parser.add_argument('--checkpoint_path', type=str, default='output/model', help='folder to save checkpoints into (empty = this folder)')
     parser.add_argument('--language_eval', type=int, default=1, help='Evaluate language as well (1 = yes, 0 = no)? BLEU/CIDEr/METEOR/ROUGE_L? requires coco-caption code from Github.')
     parser.add_argument('--eval_metrics', default=['Loss'], nargs='+', choices=['Loss', 'Bleu_4', 'METEOR', 'ROUGE_L', 'CIDEr', 'MSRVTT'], help='Evaluation metrics')
@@ -64,16 +63,10 @@ def parse_opts():
     parser.add_argument('--gpuid', type=int, default=7, help='which gpu to use. -1 = use CPU')
     parser.add_argument('--num_chunks', type=int, default=1, help='1: no attention, > 1: attention with num_chunks')
     parser.add_argument('--num_layers', type=int, default=1, help='number of layers in the lstm ')
-    parser.add_argument('--use_attention', type=int, default=0, help='0: no attention, 1: attention with num_chunks')
     parser.add_argument('--print_att_coef', type=int, default=0, help='0: no attention, 1: attention with num_chunks')
-    parser.add_argument('--output_attention', type=int, default=0, help='0: not adding output attention, 1: adding output attention')
     
-    parser.add_argument('--model_type', type=str, default='standard', choices=['standard', 'concat'], help='Type of models')
-    parser.add_argument('--att_type',  type=str, default='B', help='A/B. A: feed null token at start. B: feed features as start.')
-    parser.add_argument('--align_type', type=str, default= 'bilinear', help='sum,concat,dot,bilinear')
-    parser.add_argument('--combination_type',  type=str, default='concat', help='sum, concat: how to combine two vectors')
+    parser.add_argument('--model_type', type=str, default='standard', choices=['standard', 'concat', 'manet'], help='Type of models')
     parser.add_argument('--attention_size', type=int, default=512, help='size of the the attentional input vector')
-    parser.add_argument('--adaptive_input_size', type=int, default=0, help='if 1, multiply the image_input_encoding_size by number of features and chunks')
     parser.add_argument('--use_category', type=int, default=0, help='0: no category, 1: concat with image embedding, 2: use as start token, 3: use as start token + finetune')
     parser.add_argument('--num_category', type=int, default=20, help='number of category')
     

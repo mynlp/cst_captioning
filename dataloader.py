@@ -27,7 +27,7 @@ class DataLoader():
         self.word_embedding_size = opt.get('word_embedding_size', 512)
         self.num_chunks = opt.get('num_chunks', 1)
         self.mode = opt.get('mode', 'train')
-        self.gold_ann_file = opt.get('gold_ann_file', None)
+        self.cocofmt_file = opt.get('cocofmt_file', None)
         
         # open the hdf5 info file
         logger.info('DataLoader loading h5 file: %s', opt['label_h5'])
@@ -182,5 +182,5 @@ class DataLoader():
     def shuffle_videos(self):
         np.random.shuffle(self.index)
     
-    def get_gold_ann_file(self):
-        return self.gold_ann_file
+    def get_cocofmt_file(self):
+        return self.cocofmt_file

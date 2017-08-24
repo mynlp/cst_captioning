@@ -41,18 +41,11 @@ FEAT_SET=c3d
 
 MAX_ITERS?=20000
 NUM_CHUNKS?=1
-START_FROM?=''
-COMBINATION_TYPE=concat
-OUTPUT_ATTENTION=0
-RESUME?=0
-USE_ATTENTION?=0
 PRINT_ATT_COEF?=0
-ATTENTION_TYPE?=B
 BEAM_SIZE?=5
-ALIGN_TYPE?=manet2
 
 TODAY=20170821
-EXP_NAME?=exp_$(DATASET)_$(TODAY)_$(COMBINATION_TYPE)_$(ATTENTION_TYPE)_$(ALIGN_TYPE)
+EXP_NAME?=exp_$(DATASET)_$(TODAY)
 VAL_LANG_EVAL?=1
 TEST_LANG_EVAL?=1
 COMPARE_PPL?=1
@@ -70,8 +63,9 @@ FEAT3?=mfcc
 FEAT4?=category
 FEAT5?=vgg16
 FEAT6?=vgg19
+FEATS=resnet c3d
 
-TRAIN_ID=$(DATA_ID)_$(NUM_CHUNKS)_$(USE_ATTENTION)_$(BATCH_SIZE)_$(LEARNING_RATE)_ss$(USE_SS)_robust$(USE_ROBUST)_resume$(RESUME)
+TRAIN_ID=$(DATA_ID)_$(NUM_CHUNKS)_$(BATCH_SIZE)_$(LEARNING_RATE)_ss$(USE_SS)_robust$(USE_ROBUST)
 
 ##########################################################################
 
@@ -103,65 +97,33 @@ convert_datainfo2cocofmt: $(foreach s,$(SPLITS),$(patsubst %,$(META_DIR)/%_$(s)_
 %_cocofmt.json: %_datainfo.json 
 	python convert_datainfo2cocofmt.py $< $@ 
     
-train_single: $(patsubst %,train_single_%,$(FEAT_SET))
-train_single_%: $(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
-	$(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_%_$(POOLING)$(NUM_CHUNKS).h5 \
-	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_cocofmt.json \
+noop=
+space=$(noop) $(noop)
+
+train: $(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
 	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_sequencelabel.h5 \
-	$(FEAT_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_%_$(POOLING)$(NUM_CHUNKS).h5 \
-	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_cocofmt.json \
 	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_sequencelabel.h5 \
-	$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_$(POOLING)$(NUM_CHUNKS).h5 \
-	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json 
+	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_cocofmt.json \
+	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_cocofmt.json \
+	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
+        $(patsubst %,$(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS)) \
+	$(patsubst %,$(FEAT_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS)) \
+	$(patsubst %,$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS)) 
 	CUDA_VISIBLE_DEVICES=$(GID) python train.py \
 		--train_label_h5 $(word 1,$^) \
-		--train_feat_h5 $(word 2,$^) \
-		--train_gold_ann_file $(word 3,$^) \
-		--val_label_h5 $(word 4,$^) \
-		--val_feat_h5 $(word 5,$^) \
-		--val_gold_ann_file $(word 6,$^) \
-		--test_label_h5 $(word 7,$^) \
-		--test_feat_h5 $(word 8,$^) \
-		--test_gold_ann_file $(word 9,$^) \
+		--val_label_h5 $(word 2,$^) \
+		--test_label_h5 $(word 3,$^) \
+		--train_cocofmt_file $(word 4,$^) \
+		--val_cocofmt_file $(word 5,$^) \
+		--test_cocofmt_file $(word 6,$^) \
+		--train_feat_h5 $(patsubst %,$(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))\
+		--val_feat_h5 $(patsubst %,$(FEAT_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))\
+		--test_feat_h5 $(patsubst %,$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))\
 		--beam_size $(BEAM_SIZE) --max_patience $(MAX_PATIENCE) --compare_ppl $(COMPARE_PPL) --eval_metrics Loss \
 		--language_eval $(VAL_LANG_EVAL) --checkpoint_path $(MODEL_DIR)/$(EXP_NAME) --max_iters $(MAX_ITERS) --rnn_size $(RNN_SIZE) \
 		--train_seq_per_img $(TRAIN_SEQ_PER_IMG) --test_seq_per_img $(TEST_SEQ_PER_IMG) \
 		--batch_size $(BATCH_SIZE) --test_batch_size $(TEST_BATCH_SIZE) --learning_rate $(LEARNING_RATE) \
-		--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) --combination_type $(COMBINATION_TYPE) \
-		--use_attention $(USE_ATTENTION) --att_type $(ATTENTION_TYPE) --align_type $(ALIGN_TYPE) --output_attention $(OUTPUT_ATTENTION) \
-		--test_only $(TEST_ONLY) --resume $(RESUME) \
-		--id $*_$(TRAIN_ID) \
-		--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE)
-
-train_double: $(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
-	$(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_$(FEAT1)_mp$(NUM_CHUNKS).h5 \
-	$(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_$(FEAT2)_mp$(NUM_CHUNKS).h5 \
-	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_cocofmt.json \
-	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_sequencelabel.h5 \
-	$(FEAT_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_$(FEAT1)_mp$(NUM_CHUNKS).h5 \
-	$(FEAT_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_$(FEAT2)_mp$(NUM_CHUNKS).h5 \
-	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_cocofmt.json \
-	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_sequencelabel.h5 \
-	$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_$(FEAT1)_mp$(NUM_CHUNKS).h5 \
-	$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_$(FEAT2)_mp$(NUM_CHUNKS).h5 \
-	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json 
-	mkdir -p $(MODEL_DIR)/$(EXP_NAME)
-	CUDA_VISIBLE_DEVICES=$(GID) python train.py  \
-		--train_label_h5 $(word 1,$^) \
-		--train_feat_h5 $(word 2,$^) $(word 3,$^) \
-		--train_gold_ann_file $(word 4,$^) \
-		--val_label_h5 $(word 5,$^) \
-		--val_feat_h5 $(word 6,$^) $(word 7,$^) \
-		--val_gold_ann_file $(word 8,$^) \
-		--test_label_h5 $(word 9,$^) \
-		--test_feat_h5 $(word 10,$^) $(word 11,$^) \
-		--test_gold_ann_file $(word 12,$^) \
-		--beam_size $(BEAM_SIZE) --max_patience $(MAX_PATIENCE) --compare_ppl $(COMPARE_PPL) --eval_metrics Loss \
-		--language_eval $(VAL_LANG_EVAL) --checkpoint_path $(MODEL_DIR)/$(EXP_NAME) --max_iters $(MAX_ITERS) --rnn_size $(RNN_SIZE) \
-		--train_seq_per_img $(TRAIN_SEQ_PER_IMG) --test_seq_per_img $(TEST_SEQ_PER_IMG) \
-		--batch_size $(BATCH_SIZE) --test_batch_size $(TEST_BATCH_SIZE) --learning_rate $(LEARNING_RATE) \
-		--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) --combination_type $(COMBINATION_TYPE) \
-		--use_attention $(USE_ATTENTION) --att_type $(ATTENTION_TYPE) --align_type $(ALIGN_TYPE) --output_attention $(OUTPUT_ATTENTION) \
-		--test_only $(TEST_ONLY) --resume $(RESUME) \
-		--id $(FEAT1)$(FEAT2)_$(TRAIN_ID) \
+		--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) \
+		--test_only $(TEST_ONLY) \
+		--id $(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID) \
 		--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE)

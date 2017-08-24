@@ -78,7 +78,7 @@ class RNNUnit(nn.Module):
         
         if opt.model_type == 'standard':
             self.input_size = opt.input_encoding_size
-        elif opt.model_type == 'concat':
+        elif opt.model_type in ['concat', 'manet']:
             self.input_size = opt.input_encoding_size + opt.video_encoding_size
             
         self.rnn = getattr(nn, self.rnn_type.upper())(self.input_size, 
@@ -103,7 +103,9 @@ class CaptionModel(nn.Module):
         self.drop_prob_lm = opt.drop_prob_lm
         self.seq_length = opt.seq_length
         self.feat_dims = opt.feat_dims
+        self.num_feats = len(self.feat_dims)
         self.seq_per_img = opt.train_seq_per_img
+        self.model_type = opt.model_type
         
         self.embed = nn.Embedding(self.vocab_size + 1, self.input_encoding_size)
         self.logit = nn.Linear(self.rnn_size, self.vocab_size + 1)
@@ -113,7 +115,7 @@ class CaptionModel(nn.Module):
         self.feat_pool = FeatPool(self.feat_dims, self.num_layers * self.rnn_size, self.drop_prob_lm)
         self.feat_expander = FeatExpander(self.seq_per_img)
         
-        self.video_encoding_size = len(self.feat_dims) * self.num_layers * self.rnn_size
+        self.video_encoding_size = self.num_feats * self.num_layers * self.rnn_size
         opt.video_encoding_size = self.video_encoding_size
         self.core = RNNUnit(opt)
 
@@ -293,12 +295,37 @@ class CaptionModel(nn.Module):
         # return the samples and their log likelihoods
         return seq.transpose(0, 1), seqLogprobs.transpose(0, 1)
 
+class MANet(nn.Module):
+    """
+    Attention class
+    """
+    def __init__(self, video_encoding_size, rnn_size, num_feats):
+        super(MANet, self).__init__()
+        self.video_encoding_size = video_encoding_size
+        self.rnn_size = rnn_size
+        self.num_feats = num_feats
+        
+        self.f_feat_m = nn.Linear(self.video_encoding_size, self.num_feats)
+        self.f_h_m = nn.Linear(self.rnn_size, self.num_feats)
+        self.align_m = nn.Linear(self.num_feats, self.num_feats)
+        
+    def forward(self, x, h):
+        f_feat = self.f_feat_m(x)
+        f_h = self.f_h_m(h.squeeze(0)) # assuming now num_layers is 1
+        att_weight = nn.Softmax()(self.align_m(nn.Tanh()(f_feat + f_h)))
+        att_weight = att_weight.unsqueeze(2).expand(x.size(0), self.num_feats, self.video_encoding_size/self.num_feats)
+        att_weight = att_weight.contiguous().view(x.size(0), x.size(1))
+        return x*att_weight
+
 class ConcatCaptionModel(CaptionModel):
     """
     concat feature and word embedding at every time step
     """
     def __init__(self, opt):
         super(ConcatCaptionModel, self).__init__(opt)
+        
+        if self.model_type == 'manet':
+            self.manet = MANet(self.video_encoding_size, self.rnn_size, self.num_feats)
 
     def forward(self, feats, seq):
 
@@ -316,6 +343,9 @@ class ConcatCaptionModel(CaptionModel):
                 break
             xt = self.embed(it)
 
+            if self.model_type == 'manet':
+                fc_feats = self.manet(fc_feats, state[0])
+                
             output, state = self.core(torch.cat([xt, fc_feats], 1), state)
             output = F.log_softmax(self.logit(self.dropout(output)))
             outputs.append(output)
@@ -354,6 +384,9 @@ class ConcatCaptionModel(CaptionModel):
                 seq.append(it) #seq[t] the input of t+2 time step
                 seqLogprobs.append(sampleLogprobs.view(-1))
 
+            if self.model_type == 'manet':
+                fc_feats = self.manet(fc_feats, state[0])
+                
             output, state = self.core(torch.cat([xt, fc_feats], 1), state)
             logprobs = F.log_softmax(self.logit(output))
 
@@ -373,7 +406,6 @@ class ConcatCaptionModel(CaptionModel):
         self.done_beams = [[] for _ in range(batch_size)]
         for k in range(batch_size):
             state = self.init_hidden(beam_size)
-
             fc_feats_k = fc_feats[k].expand(beam_size, self.video_encoding_size)
             
             beam_seq = torch.LongTensor(self.seq_length, beam_size).zero_()
@@ -441,6 +473,9 @@ class ConcatCaptionModel(CaptionModel):
                 if t >= 1:
                     state = new_state
 
+                if self.model_type == 'manet':
+                    fc_feats_k = self.manet(fc_feats_k, state[0])
+                
                 output, state = self.core(torch.cat([xt, fc_feats_k], 1), state)
                 logprobs = F.log_softmax(self.logit(output))
 
@@ -449,3 +484,5 @@ class ConcatCaptionModel(CaptionModel):
             seqLogprobs[:, k] = self.done_beams[k][0]['logps']
         # return the samples and their log likelihoods
         return seq.transpose(0, 1), seqLogprobs.transpose(0, 1)
+
+
