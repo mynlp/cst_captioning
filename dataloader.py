@@ -33,7 +33,7 @@ class DataLoader():
         
         self.vocab = [i for i in self.label_h5['vocab']]
         self.videos = [i for i in self.label_h5['videos']]
-        self.ix_to_word = {i + 1: w for i, w in enumerate(self.vocab)}
+        self.ix_to_word = {i: w for i, w in enumerate(self.vocab)}
         self.num_videos = len(self.videos)
         self.index = range(self.num_videos)
 

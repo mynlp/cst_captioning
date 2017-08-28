@@ -19,10 +19,7 @@ logger = logging.getLogger(__name__)
 
 def encode_captions(videos, max_length, wtoi):
     """ 
-    encode all captions into one large array, which will be 1-indexed.
-    also produces label_start_ix and label_end_ix which store 1-indexed 
-    and inclusive (Lua-style) pointers to the first and last caption for
-    each image in the dataset.
+    encode all captions into one large array
     """
 
     N = len(videos)
@@ -33,6 +30,7 @@ def encode_captions(videos, max_length, wtoi):
     label_start_ix = np.zeros(N, dtype=int)
     label_end_ix = np.zeros(N, dtype=int)
     label_length = np.zeros(M, dtype=int)
+    label_to_video = np.zeros(M, dtype=int)
     counter = 0
     for i, v in enumerate(videos):
         n = len(v['final_captions'])
@@ -42,6 +40,7 @@ def encode_captions(videos, max_length, wtoi):
         for j, s in enumerate(v['final_captions']):
             # record the length of this sequence
             label_length[counter+j] = min(max_length, len(s))
+            label_to_video[counter+j] = i
             for k, w in enumerate(s):
                 if k < max_length:
                     Li[j, k] = wtoi[w]
@@ -66,8 +65,8 @@ def main(vocab_json, captions_json, output_h5, max_length):
     vocab = json.load(open(vocab_json))
     
     # a 1-indexed vocab translation table
-    itow = {i + 1: w for i, w in enumerate(vocab)}
-    wtoi = {w: i + 1 for i, w in enumerate(vocab)}  # inverse table
+    itow = {i: w for i, w in enumerate(vocab)}
+    wtoi = {w: i for i, w in enumerate(vocab)}  # inverse table
     
     videos = json.load(open(captions_json))
 
