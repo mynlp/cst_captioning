@@ -90,7 +90,41 @@ def standalize_msrvtt(input_file, dataset='msrvtt2016', split='train', val2016_j
                        for c in info['sentences'] if c['video_id'] in tmp_dict]
     
     return out
+
+def standalize_tvvtt(input_file, split='train2016'):
+    """
+    Standalize TRECVID V2T task
+    Read from a metadata file generated in the v2t2017 project
+    Basically there is no split in the v2t dataset, 
+    Just consider each provided set as an independent dataset
+    """
+    split_mapping = {
+        'train': 'train2016',
+        'val': 'test2016',
+        'test': 'test2017'
+    }
     
+    split = split_mapping[split]
+    logger.info('Loading file: %s, split: %s', input_file, split)
+    info = json.load(open(input_file))[split]
+    
+    out = {}
+    out['info'] = {}
+    videos = []
+    for v in info['videos']:
+        jvid = {}
+        jvid['category'] = 'unknown'
+        jvid['video_id'] = v
+        jvid['id'] = v
+        jvid['start_time'] = -1
+        jvid['end_time'] = -1
+        jvid['url'] = ''
+        videos.append(jvid)
+    out['videos'] = videos
+    out['captions'] = info['captions']
+    
+    return out
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG,
                         format='%(asctime)s:%(levelname)s: %(message)s')
@@ -99,7 +133,7 @@ if __name__ == "__main__":
     parser.add_argument('input_file', type=str, help='')
     parser.add_argument('output_json', type=str, help='')
     parser.add_argument('--split', type=str, help='')
-    parser.add_argument('--dataset', type=str, default='yt2t', choices=['yt2t', 'msrvtt2016', 'msrvtt2017'], help='Choose dataset')
+    parser.add_argument('--dataset', type=str, default='yt2t', choices=['yt2t', 'msrvtt2016', 'msrvtt2017', 'tvvtt'], help='Choose dataset')
     parser.add_argument('--val2016_json', type=str, help='use valset from msrvtt2016 contest')
 
     args = parser.parse_args()
@@ -113,6 +147,8 @@ if __name__ == "__main__":
         out = standalize_msrvtt(args.input_file, dataset=args.dataset, split=args.split, val2016_json=args.val2016_json)
     elif args.dataset == 'yt2t':
         out = standalize_yt2t(args.input_file)
+    elif args.dataset == 'tvvtt':
+        out = standalize_tvvtt(args.input_file, split=args.split)
     else:
         raise ValueError('Unknow dataset: %s', args.dataset)
         

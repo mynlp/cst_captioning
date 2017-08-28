@@ -47,7 +47,7 @@ def main(input_json, output_json):
     for i, v in enumerate(infos['videos']):
         
         jvid = {}
-        jvid['category'] = v['category']
+        jvid['category'] = v.get('category', 'unknown')
         jvid['video_id'] = v['id']
 
         sents = []
