@@ -41,7 +41,7 @@ def encode_captions(videos, max_length, wtoi):
         Li = np.zeros((n, max_length), dtype=int)
         for j, s in enumerate(v['final_captions']):
             # record the length of this sequence
-            label_length[i] = min(max_length, len(s))
+            label_length[j] = min(max_length, len(s))
             for k, w in enumerate(s):
                 if k < max_length:
                     Li[j, k] = wtoi[w]
