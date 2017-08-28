@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 import torch.optim as optim
+import torch.backends.cudnn as cudnn
 import numpy as np
 import os
 import time
@@ -18,8 +19,6 @@ import utils
 import opts
 
 logger = logging.getLogger(__name__)
-
-import pdb
 
 def train(model, criterion, optimizer, train_loader, val_loader, opt):
     
@@ -207,10 +206,12 @@ if __name__ == '__main__':
     logger.info('Input arguments: %s', json.dumps(vars(opt), sort_keys=True, indent=4))
     
     # Set the random seed manually for reproducibility.
+    torch.backends.cudnn.enabled = False
+    np.random.seed(opt.seed)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed(opt.seed)
+        torch.cuda.manual_seed_all(opt.seed)
     else:
-        torch.manual_seed(opt.seed)
+        torch.manual_seed_all(opt.seed)
     
     train_opt = {'label_h5': opt.train_label_h5, 
         'batch_size': opt.batch_size,
@@ -254,6 +255,7 @@ if __name__ == '__main__':
     if torch.cuda.is_available():
         model.cuda()
         criterion.cuda()
+        cudnn.benchmark = True
     
     if opt.test_only == 1:
         test(model, criterion, test_loader, opt)

@@ -12,8 +12,6 @@ import logging
 from datetime import datetime
 logger = logging.getLogger(__name__)
 
-import pdb
-
 class DataLoader():
     
     """Class to load video features and captions"""

@@ -1,9 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import *
-
-import pdb
+from torch.autograd import Variable
 
 def to_contiguous(tensor):
     if tensor.is_contiguous():
