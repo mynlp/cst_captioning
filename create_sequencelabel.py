@@ -57,7 +57,7 @@ def encode_captions(videos, max_length, wtoi):
     # assert np.all(label_length > 0), 'error: some caption had no words?'
 
     logger.info('encoded captions to array of size %s', `L.shape`)
-    return L, label_start_ix, label_end_ix, label_length
+    return L, label_start_ix, label_end_ix, label_length, label_to_video
 
 def main(vocab_json, captions_json, output_h5, max_length):
 
@@ -80,13 +80,14 @@ def main(vocab_json, captions_json, output_h5, max_length):
     with h5py.File(output_h5, 'w') as of:
         if len(videos[0]['captions']) > 0:        
             logger.info('Encoding captions...')
-            L, label_start_ix, label_end_ix, label_length = encode_captions(
+            L, label_start_ix, label_end_ix, label_length, label_to_video = encode_captions(
                 videos, max_length, wtoi)
             
             of.create_dataset('labels', dtype=int, data=L)
             of.create_dataset('label_start_ix', dtype=int, data=label_start_ix)
             of.create_dataset('label_end_ix', dtype=int, data=label_end_ix)
             of.create_dataset('label_length', dtype=int, data=label_length)
+            of.create_dataset('label_to_video', dtype=int, data=label_to_video)
         else:
             logger.info('Caption not found! Skipped encoding captions.')
                     

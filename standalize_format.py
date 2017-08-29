@@ -114,7 +114,7 @@ def standalize_tvvtt(input_file, split='train2016'):
     for v in info['videos']:
         jvid = {}
         jvid['category'] = 'unknown'
-        jvid['video_id'] = v
+        jvid['video_id'] = str(v)
         jvid['id'] = v
         jvid['start_time'] = -1
         jvid['end_time'] = -1
