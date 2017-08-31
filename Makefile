@@ -18,7 +18,7 @@ MAX_SEQ_LEN?=30          # in output/metadata seqlen was 20; was 30 in output/me
 
 GID?=3
 
-DATASET?=yt2t
+DATASET?=msrvtt2017
 TRAIN_DATASET?=$(DATASET)
 VAL_DATASET?=$(DATASET)
 TEST_DATASET?=$(DATASET)
@@ -44,7 +44,7 @@ NUM_CHUNKS?=1
 PRINT_ATT_COEF?=0
 BEAM_SIZE?=5
 
-TODAY=20170821
+TODAY=20170829
 EXP_NAME?=exp_$(DATASET)_$(TODAY)
 VAL_LANG_EVAL?=1
 TEST_LANG_EVAL?=1
@@ -63,7 +63,7 @@ FEAT3?=mfcc
 FEAT4?=category
 FEAT5?=vgg16
 FEAT6?=vgg19
-FEATS=resnet c3d
+FEATS=$(FEAT1) $(FEAT2) $(FEAT3) $(FEAT5) $(FEAT6)
 
 TRAIN_ID=$(DATA_ID)_$(NUM_CHUNKS)_$(BATCH_SIZE)_$(LEARNING_RATE)_ss$(USE_SS)_robust$(USE_ROBUST)
 
@@ -115,7 +115,8 @@ train: $(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
 	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
         $(patsubst %,$(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS)) \
 	$(patsubst %,$(FEAT_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS)) \
-	$(patsubst %,$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS)) 
+	$(patsubst %,$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))
+	mkdir -p $(MODEL_DIR)/$(EXP_NAME)
 	CUDA_VISIBLE_DEVICES=$(GID) python train.py \
 		--train_label_h5 $(word 1,$^) \
 		--val_label_h5 $(word 2,$^) \
@@ -130,8 +131,18 @@ train: $(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
 		--language_eval $(VAL_LANG_EVAL) --checkpoint_path $(MODEL_DIR)/$(EXP_NAME) --max_iters $(MAX_ITERS) --rnn_size $(RNN_SIZE) \
 		--train_seq_per_img $(TRAIN_SEQ_PER_IMG) --test_seq_per_img $(TEST_SEQ_PER_IMG) \
 		--batch_size $(BATCH_SIZE) --test_batch_size $(TEST_BATCH_SIZE) --learning_rate $(LEARNING_RATE) \
-		--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) \
+		--save_checkpoint_every 1 --save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) \
 		--test_only $(TEST_ONLY) \
 		--id $(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID) \
-		--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) \
-		2>&1 | tee $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).log 	
+		--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) 
+		#2>&1 | tee $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).log 
+
+###########################
+
+METEOR_TOOL=/home/plsang/works/tools/meteor-1.5
+#RUN_FILE=/home/plsang/works/tvv2t/output/submission/description/resnet.txt
+RUN_FILE=/home/plsang/works/captioning.pytorch/output/model/exp_msrvtt2017_20170830/resnetc3dmfccvgg16vgg19_msrvtt2017train_msrvtt2017val_tvvttval_1_64_0.001_ss0_robust0_Loss_test_predictions.txt
+
+GT16_FILE=/home/plsang/works/v2t2017/input/v2t2016/tv16.ref.meteor
+test:
+	java -Xmx2G -jar $(METEOR_TOOL)/meteor-1.5.jar $(RUN_FILE) $(GT16_FILE) -l en -norm -r 2 -t adq 

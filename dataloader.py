@@ -76,8 +76,9 @@ class DataLoader():
             feat = torch.FloatTensor(self.batch_size, self.num_chunks, dim).zero_()
             video_batch.append(feat)
 
-        label_batch = torch.LongTensor(self.batch_size * self.seq_per_img, self.seq_length + 2).zero_()
-        mask_batch = torch.FloatTensor(self.batch_size * self.seq_per_img, self.seq_length + 2).zero_()
+        if self.has_label:
+            label_batch = torch.LongTensor(self.batch_size * self.seq_per_img, self.seq_length + 2).zero_()
+            mask_batch = torch.FloatTensor(self.batch_size * self.seq_per_img, self.seq_length + 2).zero_()
         
         videoids_batch = []
         
@@ -124,17 +125,18 @@ class DataLoader():
                     self.shuffle_videos()
             
         self.iterator = counter
-
-        t_start = time.time()
-        nonzeros = np.array(list(map(lambda x: (x != 0).sum()+2, label_batch)))
-        for ix, row in enumerate(mask_batch):
-            row[:nonzeros[ix]] = 1
         
         data = {}
         data['feats'] = video_batch
-        data['labels'] = label_batch
         data['ids'] = videoids_batch
-        data['masks'] = mask_batch 
+        
+        if self.has_label:
+            nonzeros = np.array(list(map(lambda x: (x != 0).sum()+2, label_batch)))
+            for ix, row in enumerate(mask_batch):
+                row[:nonzeros[ix]] = 1
+                
+            data['labels'] = label_batch
+            data['masks'] = mask_batch
 
         return data
 

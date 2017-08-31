@@ -98,8 +98,9 @@ def validate(model, criterion, loader, opt):
     for ii in range(num_iters):
         data = loader.get_batch()
         feats = [Variable(feat, volatile=True) for feat in data['feats']]
-        labels = Variable(data['labels'], volatile=True)
-        masks = Variable(data['masks'], volatile=True)
+        if loader.has_label:
+            labels = Variable(data['labels'], volatile=True)
+            masks = Variable(data['masks'], volatile=True)
         
         if ii==(num_iters-1) and last_batch_size > 0:
             feats = [f[:last_batch_size] for f in feats]
@@ -109,8 +110,9 @@ def validate(model, criterion, loader, opt):
                 
         if torch.cuda.is_available():
             feats = [feat.cuda() for feat in feats]
-            labels = labels.cuda()
-            masks = masks.cuda()
+            if loader.has_label:
+                labels = labels.cuda()
+                masks = masks.cuda()
         
         if loader.has_label:
             pred = model(feats, labels)
@@ -118,7 +120,7 @@ def validate(model, criterion, loader, opt):
             loss_sum += loss.data[0]
         
         seq, _ = model.sample(feats, {'beam_size': opt.beam_size})
-        sents = utils.decode_sequence(loader.get_vocab(), seq)
+        sents = utils.decode_sequence(opt.vocab, seq)
         
         for jj, sent in enumerate(sents):
             entry = {'image_id': data['ids'][jj], 'caption': sent}
@@ -150,12 +152,11 @@ def test(model, criterion, loader, opt, infos={}):
             checkpoint_pkl = os.path.join(opt.checkpoint_path, opt.id + '_' + eval_metric + '.pkl')
             logger.info('Loading checkpoint: %s', checkpoint_pkl)
             model.load_state_dict(torch.load(checkpoint_pkl))
-            
         else:
             logger.info('Best val %s score: %f. Best iter: %d. Best epoch: %d', eval_metric, 
-                        infos['best_scores'][eval_metric], 
-                        infos['best_iters'][eval_metric],
-                        infos['best_epochs'][eval_metric])
+                        infos['best_scores'].get(eval_metric, 0), 
+                        infos['best_iters'].get(eval_metric, 0),
+                        infos['best_epochs'].get(eval_metric, 0))
 
         results = validate(model, criterion, loader, opt)
         logger.info('Test output: %s', json.dumps(results['scores'], indent=4))
@@ -244,6 +245,7 @@ if __name__ == '__main__':
     val_loader = DataLoader(val_opt)
     test_loader = DataLoader(test_opt)
     
+    opt.vocab = train_loader.get_vocab()
     opt.vocab_size = train_loader.get_vocab_size()
     opt.seq_length = train_loader.get_seq_length()
     opt.feat_dims = train_loader.get_feat_dims()
