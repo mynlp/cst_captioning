@@ -44,7 +44,7 @@ NUM_CHUNKS?=1
 PRINT_ATT_COEF?=0
 BEAM_SIZE?=5
 
-TODAY=20170829
+TODAY=20170831
 EXP_NAME?=exp_$(DATASET)_$(TODAY)
 VAL_LANG_EVAL?=1
 TEST_LANG_EVAL?=1
@@ -65,7 +65,7 @@ FEAT5?=vgg16
 FEAT6?=vgg19
 FEATS=$(FEAT1) $(FEAT2) $(FEAT3) $(FEAT5) $(FEAT6)
 
-TRAIN_ID=$(DATA_ID)_$(NUM_CHUNKS)_$(BATCH_SIZE)_$(LEARNING_RATE)_ss$(USE_SS)_robust$(USE_ROBUST)
+TRAIN_ID=$(DATA_ID)_$(MODEL_TYPE)_$(NUM_CHUNKS)_$(BATCH_SIZE)_$(LEARNING_RATE)
 
 ###################################################################################################################
 ###
@@ -102,6 +102,16 @@ convert_datainfo2cocofmt: $(foreach s,$(SPLITS),$(patsubst %,$(META_DIR)/%_$(s)_
 %_cocofmt.json: %_datainfo.json 
 	python convert_datainfo2cocofmt.py $< $@ 
 
+### frameinfo
+get_dataset = $(word 1,$(subst _, ,$1))
+get_split = $(word 2,$(subst _, ,$1))
+create_frameinfo: $(foreach s,$(SPLITS),$(patsubst %,$(META_DIR)/%_$(s)_frameinfo.json,$(DATASETS)))
+%_frameinfo.json: %_datainfo.json 
+	python create_frameinfo.py $^ $@ \
+	       --dataset $(call get_dataset,$(notdir $@)) \
+	       --split $(call get_split,$(notdir $@)) \
+	       --input_dir $(IN_DIR) --img_type rgb
+
 #####################################################################################################################
 
 noop=
@@ -131,7 +141,7 @@ train: $(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
 		--language_eval $(VAL_LANG_EVAL) --checkpoint_path $(MODEL_DIR)/$(EXP_NAME) --max_iters $(MAX_ITERS) --rnn_size $(RNN_SIZE) \
 		--train_seq_per_img $(TRAIN_SEQ_PER_IMG) --test_seq_per_img $(TEST_SEQ_PER_IMG) \
 		--batch_size $(BATCH_SIZE) --test_batch_size $(TEST_BATCH_SIZE) --learning_rate $(LEARNING_RATE) \
-		--save_checkpoint_every 1 --save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) \
+		--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) \
 		--test_only $(TEST_ONLY) \
 		--id $(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID) \
 		--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) 
@@ -145,4 +155,12 @@ RUN_FILE=/home/plsang/works/captioning.pytorch/output/model/exp_msrvtt2017_20170
 
 GT16_FILE=/home/plsang/works/v2t2017/input/v2t2016/tv16.ref.meteor
 test:
-	java -Xmx2G -jar $(METEOR_TOOL)/meteor-1.5.jar $(RUN_FILE) $(GT16_FILE) -l en -norm -r 2 -t adq 
+	java -Xmx2G -jar $(METEOR_TOOL)/meteor-1.5.jar $(RUN_FILE) $(GT16_FILE) -l en -norm -r 2 -t adq
+
+RUN1_FILE=$(MODEL_DIR)/$(EXP_NAME)/resnetc3dmfccvgg16vgg19_msrvtt2017train_msrvtt2017val_tvvtttest_manet_1_64_0.001_Loss_test_predictions.json
+RUN2_FILE=$(MODEL_DIR)/$(EXP_NAME)/resnetc3dmfccvgg16vgg19_msrvtt2017train_msrvtt2017val_tvvtttest_concat_1_64_0.001_Loss_test_predictions.json
+VTT2017_SUBMIT_DIR=/home/plsang/active/v2t2017/output/result_to_submit/captioning
+convert_v2t2017:
+	python convert_coco2trecvidfmt.py $(RUN1_FILE) $(VTT2017_SUBMIT_DIR)/NII_Hitachi_UIT_R1_primary.txt 
+	python convert_coco2trecvidfmt.py $(RUN2_FILE) $(VTT2017_SUBMIT_DIR)/NII_Hitachi_UIT_R2.txt 
+

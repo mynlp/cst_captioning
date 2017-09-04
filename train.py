@@ -212,7 +212,7 @@ if __name__ == '__main__':
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(opt.seed)
     else:
-        torch.manual_seed_all(opt.seed)
+        torch.manual_seed(opt.seed)
     
     train_opt = {'label_h5': opt.train_label_h5, 
         'batch_size': opt.batch_size,
