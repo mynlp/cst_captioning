@@ -15,6 +15,7 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+__PAD_TOKEN = '<pad>'
 __UNK_TOKEN = '<unk>'
 __BOS_TOKEN = '<start>'
 __EOS_TOKEN = '<end>'
@@ -34,9 +35,8 @@ def build_vocab(videos, word_count_threshold):
     unknown_count = sum(counter[w] for w in unknown_words)
     total_count = sum(counter.itervalues())
 
-    # this is to make sure, word index (including unk) is greater than 0
-    # because in the neuraltalk project the bos and eos are both NULL (0) tokens
-    vocab = [__BOS_TOKEN, __EOS_TOKEN, __UNK_TOKEN]
+    # for efficent calculating, set __EOS_TOKEN first so that its index will be 0
+    vocab = [__EOS_TOKEN, __BOS_TOKEN, __UNK_TOKEN]
     vocab.extend([w for w, n in counter.iteritems() if n >= word_count_threshold])
     
     logger.info('Total words: %d', total_count)

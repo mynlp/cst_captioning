@@ -6,19 +6,19 @@ META_DIR=$(OUT_DIR)/metadata
 FEAT_DIR=$(OUT_DIR)/feature
 MODEL_DIR=$(OUT_DIR)/model
 
-MSRVTT2016_DIR=$(IN_DIR)/msrvtt2016
+MSRVTT2016_DIR=$(IN_DIR)/msrvtt
 MSRVTT2017_DIR=$(IN_DIR)/msrvtt2017
 YT2T_DIR=$(IN_DIR)/yt2t
 
 SPLITS=train val test
-DATASETS=yt2t msrvtt2016 msrvtt2017 tvvtt
+DATASETS=yt2t msrvtt msrvtt2017 tvvtt
 
 WORD_COUNT_THRESHOLD?=3  # in output/metadata this threshold was 0; was 3 in output/metadata2017
 MAX_SEQ_LEN?=30          # in output/metadata seqlen was 20; was 30 in output/metadata2017
 
 GID?=3
 
-DATASET?=msrvtt2017
+DATASET?=yt2t
 TRAIN_DATASET?=$(DATASET)
 VAL_DATASET?=$(DATASET)
 TEST_DATASET?=$(DATASET)
@@ -35,7 +35,7 @@ TEST_SEQ_PER_IMG?=20
 RNN_SIZE?=512
 TEST_ONLY?=0
 
-MAX_PATIENCE?=20 # FOR EARLY STOPPING
+MAX_PATIENCE?=5 # FOR EARLY STOPPING
 SAVE_CHECKPOINT_FROM=1
 FEAT_SET=c3d
 
@@ -63,7 +63,9 @@ FEAT3?=mfcc
 FEAT4?=category
 FEAT5?=vgg16
 FEAT6?=vgg19
-FEATS=$(FEAT1) $(FEAT2) $(FEAT3) $(FEAT5) $(FEAT6)
+
+#FEATS=$(FEAT1) $(FEAT2) $(FEAT3) $(FEAT5) $(FEAT6)
+FEATS=$(FEAT1)
 
 TRAIN_ID=$(DATA_ID)_$(MODEL_TYPE)_$(NUM_CHUNKS)_$(BATCH_SIZE)_$(LEARNING_RATE)
 
@@ -73,7 +75,7 @@ pre_process: standalize_datainfo preprocess_datainfo build_vocab create_sequence
 
 ### Standalize data
 standalize_datainfo: $(foreach d,$(DATASETS),$(patsubst %,$(META_DIR)/$(d)_%_datainfo.json,$(SPLITS)))
-$(META_DIR)/msrvtt2016_%_datainfo.json: $(MSRVTT2016_DIR)/%_videodatainfo.json
+$(META_DIR)/msrvtt_%_datainfo.json: $(MSRVTT2016_DIR)/%_videodatainfo.json
 	python standalize_format.py $^ $@ --dataset msrvtt2016 --split $*
 $(META_DIR)/msrvtt2017_%_datainfo.json: $(MSRVTT2017_DIR)/msrvtt2017_%_videodatainfo.json
 	python standalize_format.py $^ $@ --dataset msrvtt2017 --split $* \

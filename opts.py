@@ -17,7 +17,7 @@ def parse_opts():
     parser.add_argument('--test_cocofmt_file', type=str, help='Gold captions in MSCOCO format to cal language metrics')
     
     # Optimization: General
-    parser.add_argument('--max_patience', type=int, default=50, help='max number of epoch to run since the minima is detected -- early stopping')
+    parser.add_argument('--max_patience', type=int, default=5, help='max number of epoch to run since the minima is detected -- early stopping')
     parser.add_argument('--batch_size', type=int, default=128, help='Video batch size (there will be x seq_per_img sentences)')
     parser.add_argument('--test_batch_size', type=int, default=32, help='what is the batch size in number of images per batch? (there will be x seq_per_img sentences)')
     parser.add_argument('--train_seq_per_img', type=int, default=20, help='number of captions to sample for each image during training. Done for efficiency since CNN forward pass is expensive.')
@@ -43,8 +43,6 @@ def parse_opts():
     parser.add_argument('--optim_epsilon', type=float, default=1e-8, help='epsilon that goes into denominator for smoothing')
     
     # Evaluation/Checkpointing
-    parser.add_argument('--num_val_videos', type=int, default=-1, help='how many videos to use when periodically evaluating the validation loss? (-1 = all)')
-    parser.add_argument('--num_test_videos', type=int, default=-1, help='how many videos to use when periodically evaluating the validation loss? (-1 = all)')
     parser.add_argument('--save_checkpoint_from', type=int, default=20, help='Start saving checkpoint from this epoch')
     parser.add_argument('--save_checkpoint_every', type=int, default=5, help='how often to save a model checkpoint in epochs?')
     
@@ -57,7 +55,6 @@ def parse_opts():
     parser.add_argument('--loglevel', type=str, default='DEBUG', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'])
     
     ## misc
-    parser.add_argument('--backend', type=str, default='cudnn', help='nn|cudnn')
     parser.add_argument('--id', type=str, default=None, help='an id identifying this run/job. used in cross-val and appended when writing progress files')
     parser.add_argument('--seed', type=int, default=123, help='random number generator seed to use')
     parser.add_argument('--gpuid', type=int, default=7, help='which gpu to use. -1 = use CPU')

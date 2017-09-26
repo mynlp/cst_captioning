@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 import torch.optim as optim
-import torch.backends.cudnn as cudnn
+from torch.nn.utils import clip_grad_norm
 import numpy as np
 import os
 import time
@@ -15,6 +15,7 @@ from datetime import datetime
 
 from dataloader import DataLoader
 from model import CaptionModel, ConcatCaptionModel, LanguageModelCriterion
+
 import utils
 import opts
 
@@ -47,8 +48,10 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt):
         optimizer.zero_grad()
         model.set_seq_per_img(train_loader.get_seq_per_img())
         pred = model(feats, labels)
+        
         loss = criterion(pred, labels[:,1:], masks[:,1:])
         loss.backward()
+        clip_grad_norm(model.parameters(), opt.grad_clip)
         optimizer.step()
         
         if infos['iter'] % opt.print_log_interval == 0:
@@ -119,13 +122,14 @@ def validate(model, criterion, loader, opt):
             loss = criterion(pred, labels[:,1:], masks[:,1:])
             loss_sum += loss.data[0]
         
-        seq, _ = model.sample(feats, {'beam_size': opt.beam_size})
+        # seq, _ = model.sample(feats, {'beam_size': opt.beam_size})
+        seq, _ = model.sample(feats, {'beam_size': 1})
         sents = utils.decode_sequence(opt.vocab, seq)
         
         for jj, sent in enumerate(sents):
             entry = {'image_id': data['ids'][jj], 'caption': sent}
             predictions.append(entry)
-            logger.debug('video %s: %s' %(entry['image_id'], entry['caption']))
+            logger.debug('[%d] video %s: %s' %(jj, entry['image_id'], entry['caption']))
                      
     loss = round(loss_sum/num_iters, 3)
     results = {}
@@ -207,13 +211,12 @@ if __name__ == '__main__':
     logger.info('Input arguments: %s', json.dumps(vars(opt), sort_keys=True, indent=4))
     
     # Set the random seed manually for reproducibility.
-    torch.backends.cudnn.enabled = False
-    np.random.seed(opt.seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(opt.seed)
-    else:
-        torch.manual_seed(opt.seed)
     
+    np.random.seed(opt.seed)
+    torch.manual_seed(opt.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(opt.seed)
+        
     train_opt = {'label_h5': opt.train_label_h5, 
         'batch_size': opt.batch_size,
         'feat_h5': opt.train_feat_h5,
@@ -251,13 +254,15 @@ if __name__ == '__main__':
     opt.feat_dims = train_loader.get_feat_dims()
     
     logger.info('Building model...')
-    model = ConcatCaptionModel(opt)
+    if opt.model_type == 'standard':
+        model = CaptionModel(opt)
+    else:    
+        model = ConcatCaptionModel(opt)
     criterion = LanguageModelCriterion()
     
     if torch.cuda.is_available():
         model.cuda()
         criterion.cuda()
-        cudnn.benchmark = True
     
     if opt.test_only == 1:
         test(model, criterion, test_loader, opt)

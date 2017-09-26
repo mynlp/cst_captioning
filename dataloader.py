@@ -33,6 +33,7 @@ class DataLoader():
         
         self.vocab = [i for i in self.label_h5['vocab']]
         self.videos = [i for i in self.label_h5['videos']]
+        
         self.ix_to_word = {i: w for i, w in enumerate(self.vocab)}
         self.num_videos = len(self.videos)
         self.index = range(self.num_videos)
@@ -77,15 +78,13 @@ class DataLoader():
             video_batch.append(feat)
 
         if self.has_label:
-            label_batch = torch.LongTensor(self.batch_size * self.seq_per_img, self.seq_length + 2).zero_()
-            mask_batch = torch.FloatTensor(self.batch_size * self.seq_per_img, self.seq_length + 2).zero_()
+            label_batch = torch.LongTensor(self.batch_size * self.seq_per_img, self.seq_length).zero_()
+            mask_batch = torch.FloatTensor(self.batch_size * self.seq_per_img, self.seq_length).zero_()
         
         videoids_batch = []
-        
-        counter = self.iterator
 
         for ii in range(self.batch_size):
-            idx = self.index[counter]
+            idx = self.index[self.iterator]
             video_id = int(self.videos[idx])
             videoids_batch.append(video_id)
 
@@ -114,24 +113,23 @@ class DataLoader():
                         seq[q] = seq_all[ixl]
                     
                 il = ii*self.seq_per_img
-                label_batch[il:il+self.seq_per_img, 1:self.seq_length+1] = seq
+                label_batch[il:il+self.seq_per_img] = seq
 
-            counter += 1
-            if counter >= self.num_videos:
-                counter = 0
+            self.iterator += 1
+            if self.iterator >= self.num_videos:
+                self.iterator = 0
                 self.epoch = self.epoch + 1
-                logger.info('===> Starting epoch %d', self.epoch)
+                logger.info('===> Finished loading epoch %d', self.epoch)
                 if self.mode == 'train':
                     self.shuffle_videos()
-            
-        self.iterator = counter
         
         data = {}
         data['feats'] = video_batch
         data['ids'] = videoids_batch
         
         if self.has_label:
-            nonzeros = np.array(list(map(lambda x: (x != 0).sum()+2, label_batch)))
+            # + 1 here to count the <eos> token, because the <eos> token is set to 0
+            nonzeros = np.array(list(map(lambda x: (x != 0).sum() + 1, label_batch)))
             for ix, row in enumerate(mask_batch):
                 row[:nonzeros[ix]] = 1
                 

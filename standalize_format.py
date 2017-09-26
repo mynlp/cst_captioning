@@ -23,18 +23,23 @@ def standalize_yt2t(input_file):
     lines = [line.split('\t') for line in lines]
     
     logger.info('Building caption dictionary for each video key')
+    video_ids = []
     capdict = {}
     for line in lines:
-        capdict.setdefault(line[0],[]).append(line[1])
+        video_id = line[0] 
+        if video_id in capdict:
+            capdict[video_id].append(line[1])
+        else:
+            capdict[video_id] = [line[1]]
+            video_ids.append(video_id)
     
     # create the json blob
     videos = []
     captions = []
     counter = itertools.count()
-    for k,v in capdict.iteritems():
-        video_id = k
-        vid = int(video_id[3:])
+    for video_id in video_ids:
         
+        vid = int(video_id[3:])
         jvid = {}
         jvid['category'] = 'unknown'
         jvid['video_id'] = video_id
@@ -44,7 +49,7 @@ def standalize_yt2t(input_file):
         jvid['url'] = ''
         videos.append(jvid)
         
-        for caption in v:
+        for caption in capdict[video_id]:
             jcap = {}
             jcap['id'] = next(counter)
             jcap['video_id'] = vid
@@ -84,7 +89,7 @@ def standalize_msrvtt(input_file, dataset='msrvtt2016', split='train', val2016_j
 
     else:
         out['videos'] = [v for v in info['videos'] if v['split'] == split]
-
+    
     tmp_dict = {v['video_id']:v['id'] for v in out['videos']}
     out['captions'] = [{'id': c['sen_id'], 'video_id': tmp_dict[c['video_id']], 'caption': c['caption']} 
                        for c in info['sentences'] if c['video_id'] in tmp_dict]

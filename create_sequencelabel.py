@@ -13,7 +13,7 @@ from random import shuffle, seed
 
 import logging
 from datetime import datetime
-from build_vocab import __UNK_TOKEN
+from build_vocab import __PAD_TOKEN, __UNK_TOKEN, __BOS_TOKEN, __EOS_TOKEN
 
 logger = logging.getLogger(__name__)
 
@@ -36,16 +36,18 @@ def encode_captions(videos, max_length, wtoi):
         n = len(v['final_captions'])
         assert n > 0, 'error: some image has no captions'
 
-        Li = np.zeros((n, max_length), dtype=int)
+        Li = np.zeros((n, max_length), dtype=int) # 0 is __PAD_TOKEN, implicitly
         for j, s in enumerate(v['final_captions']):
-            # record the length of this sequence
+            
             label_length[counter+j] = min(max_length, len(s))
             label_to_video[counter+j] = i
+            
+            # truncated at max_length, thus the last token might be not the <eos>. 
+            # any problem with this? 
             for k, w in enumerate(s):
                 if k < max_length:
                     Li[j, k] = wtoi[w]
 
-        # note: word indices are 1-indexed, and captions are padded with zeros
         label_arrays.append(Li)
         label_start_ix[i] = counter
         label_end_ix[i] = counter + n
@@ -64,9 +66,8 @@ def main(vocab_json, captions_json, output_h5, max_length):
     # create the vocab
     vocab = json.load(open(vocab_json))
     
-    # a 1-indexed vocab translation table
-    itow = {i: w for i, w in enumerate(vocab)}
-    wtoi = {w: i for i, w in enumerate(vocab)}  # inverse table
+    # inverse table
+    wtoi = {w: i for i, w in enumerate(vocab)} 
     
     videos = json.load(open(captions_json))
 
@@ -74,7 +75,9 @@ def main(vocab_json, captions_json, output_h5, max_length):
     for v in videos:
         v['final_captions'] = []
         for txt in v['processed_tokens']:
-            caption = [w if w in wtoi else __UNK_TOKEN for w in txt]
+            caption = [__BOS_TOKEN]
+            caption += [w if w in wtoi else __UNK_TOKEN for w in txt]
+            caption += [__EOS_TOKEN]
             v['final_captions'].append(caption)
     
     with h5py.File(output_h5, 'w') as of:
