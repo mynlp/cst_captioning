@@ -33,7 +33,7 @@ def parse_opts():
     parser.add_argument('--input_encoding_size', type=int, default=512, help='the encoding size of each frame in the video.')
     parser.add_argument('--max_iters', type=int, default=sys.maxint, help='max number of iterations to run for (-1 = run forever)')
     parser.add_argument('--max_epochs', type=int, default=sys.maxint, help='max number of epochs to run for (-1 = run forever)')
-    parser.add_argument('--grad_clip', type=float, default=0.1, help='clip gradients at this value (note should be lower than usual 5 because we normalize grads by both batch and seq_length)')
+    parser.add_argument('--grad_clip', type=float, default=0.25, help='clip gradients at this value (note should be lower than usual 5 because we normalize grads by both batch and seq_length)')
     parser.add_argument('--drop_prob_lm', type=float, default=0.5, help='strength of dropout in the Language Model RNN')
 
     # Optimization: for the Language Model
@@ -44,7 +44,7 @@ def parse_opts():
     
     # Evaluation/Checkpointing
     parser.add_argument('--save_checkpoint_from', type=int, default=20, help='Start saving checkpoint from this epoch')
-    parser.add_argument('--save_checkpoint_every', type=int, default=5, help='how often to save a model checkpoint in epochs?')
+    parser.add_argument('--save_checkpoint_every', type=int, default=1, help='how often to save a model checkpoint in epochs?')
     
     parser.add_argument('--checkpoint_path', type=str, default='output/model', help='folder to save checkpoints into (empty = this folder)')
     parser.add_argument('--language_eval', type=int, default=1, help='Evaluate language as well (1 = yes, 0 = no)? BLEU/CIDEr/METEOR/ROUGE_L? requires coco-caption code from Github.')

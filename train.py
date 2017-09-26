@@ -6,6 +6,7 @@ import torch.optim as optim
 from torch.nn.utils import clip_grad_norm
 import numpy as np
 import os
+import sys
 import time
 import math
 import json
@@ -14,7 +15,7 @@ import logging
 from datetime import datetime
 
 from dataloader import DataLoader
-from model import CaptionModel, ConcatCaptionModel, LanguageModelCriterion
+from model import CaptionModel, LanguageModelCriterion
 
 import utils
 import opts
@@ -76,7 +77,7 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt):
             infos['epoch'] = train_loader.get_current_epoch()
             checked = False
         
-        if infos['epoch'] - infos['best_epochs'].get(opt.eval_metrics[0], 0) > opt.max_patience or \
+        if infos['epoch'] - infos['best_epochs'].get(opt.eval_metrics[0], sys.maxint) > opt.max_patience or \
             infos['epoch'] >= opt.max_epochs or \
             infos['iter'] >= opt.max_iters:
             logger.info('>>> Terminating...')
@@ -122,8 +123,7 @@ def validate(model, criterion, loader, opt):
             loss = criterion(pred, labels[:,1:], masks[:,1:])
             loss_sum += loss.data[0]
         
-        # seq, _ = model.sample(feats, {'beam_size': opt.beam_size})
-        seq, _ = model.sample(feats, {'beam_size': 1})
+        seq, _ = model.sample(feats, {'beam_size': opt.beam_size})
         sents = utils.decode_sequence(opt.vocab, seq)
         
         for jj, sent in enumerate(sents):
@@ -187,7 +187,7 @@ def check_model(model, opt, infos):
 
             logger.info('>>> Found new best [%s] score: %f, at iter: %d, epoch %d', 
                         eval_metric, current_score, infos['iter'], infos['epoch'])
-            checkpoint_pkl = os.path.join(opt.checkpoint_path, opt.id + '_' + eval_metric + '.pkl')
+            checkpoint_pkl = os.path.join(opt.checkpoint_path, opt.id + '_' + eval_metric + '.pth')
             torch.save(model.state_dict(), checkpoint_pkl)               
             logger.info('Wrote checkpoint to: %s', checkpoint_pkl)
             
@@ -211,7 +211,6 @@ if __name__ == '__main__':
     logger.info('Input arguments: %s', json.dumps(vars(opt), sort_keys=True, indent=4))
     
     # Set the random seed manually for reproducibility.
-    
     np.random.seed(opt.seed)
     torch.manual_seed(opt.seed)
     if torch.cuda.is_available():
@@ -254,10 +253,7 @@ if __name__ == '__main__':
     opt.feat_dims = train_loader.get_feat_dims()
     
     logger.info('Building model...')
-    if opt.model_type == 'standard':
-        model = CaptionModel(opt)
-    else:    
-        model = ConcatCaptionModel(opt)
+    model = CaptionModel(opt)
     criterion = LanguageModelCriterion()
     
     if torch.cuda.is_available():

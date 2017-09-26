@@ -19,12 +19,12 @@ class LanguageModelCriterion(nn.Module):
         target = target[:, :pred.size(1)]
         mask =  mask[:, :pred.size(1)]
         
-        pred_ = to_contiguous(pred).view(-1, pred.size(2))
-        target_ = to_contiguous(target).view(-1, 1)
-        mask_ = to_contiguous(mask).view(-1, 1)
+        pred = to_contiguous(pred).view(-1, pred.size(2))
+        target = to_contiguous(target).view(-1, 1)
+        mask = to_contiguous(mask).view(-1, 1)
         
-        output = - pred_.gather(1, target_) * mask_
-        output = torch.sum(output) / torch.sum(mask_)
+        output = -pred.gather(1, target) * mask
+        output = torch.sum(output) / torch.sum(mask)
 
         return output
     
@@ -87,6 +87,28 @@ class RNNUnit(nn.Module):
         output, state = self.rnn(xt.unsqueeze(0), state)
         return output.squeeze(0), state
     
+
+class MANet(nn.Module):
+    """
+    MANet: Modal Attention 
+    """
+    def __init__(self, video_encoding_size, rnn_size, num_feats):
+        super(MANet, self).__init__()
+        self.video_encoding_size = video_encoding_size
+        self.rnn_size = rnn_size
+        self.num_feats = num_feats
+        
+        self.f_feat_m = nn.Linear(self.video_encoding_size, self.num_feats)
+        self.f_h_m = nn.Linear(self.rnn_size, self.num_feats)
+        self.align_m = nn.Linear(self.num_feats, self.num_feats)
+        
+    def forward(self, x, h):
+        f_feat = self.f_feat_m(x)
+        f_h = self.f_h_m(h.squeeze(0)) # assuming now num_layers is 1
+        att_weight = nn.Softmax()(self.align_m(nn.Tanh()(f_feat + f_h)))
+        att_weight = att_weight.unsqueeze(2).expand(x.size(0), self.num_feats, self.video_encoding_size/self.num_feats)
+        att_weight = att_weight.contiguous().view(x.size(0), x.size(1))
+        return x*att_weight
     
 class CaptionModel(nn.Module):
     """
@@ -111,13 +133,16 @@ class CaptionModel(nn.Module):
         self.logit = nn.Linear(self.rnn_size, self.vocab_size)
         self.dropout = nn.Dropout(self.drop_prob_lm)
 
-        #self.init_weights()
+        self.init_weights()
         self.feat_pool = FeatPool(self.feat_dims, self.num_layers * self.rnn_size, self.drop_prob_lm)
         self.feat_expander = FeatExpander(self.seq_per_img)
         
         self.video_encoding_size = self.num_feats * self.num_layers * self.rnn_size
         opt.video_encoding_size = self.video_encoding_size
         self.core = RNNUnit(opt)
+        
+        if self.model_type == 'manet':
+            self.manet = MANet(self.video_encoding_size, self.rnn_size, self.num_feats)
 
     def set_seq_per_img(self, x):
         self.seq_per_img = x
@@ -147,12 +172,13 @@ class CaptionModel(nn.Module):
         state = self.init_hidden(batch_size)
         outputs = []
 
-        # note that the <eos> token is not used
-        # while the additional token is the image_feature
-        # therefore the lenght is still seq_length
-        for i in range(seq.size(1)):
-            token_idx = i-1
-            if i == 0:
+        # -- if <image feature> is input at the first step, use index -1
+        # -- the <eos> token is not used for training
+        start_i = -1 if self.model_type == 'standard' else 0
+        end_i = seq.size(1) - 1
+        
+        for token_idx in range(start_i, end_i):
+            if token_idx == -1:
                 xt = fc_feats
             else:    
                 it = seq[:, token_idx].clone()
@@ -162,13 +188,18 @@ class CaptionModel(nn.Module):
                     break
                 xt = self.embed(it)
                 
-            output, state = self.core(xt, state)
-            
-            if i > 0:
+            if self.model_type == 'standard':
+                output, state = self.core(xt, state)
+            else:    
+                if self.model_type == 'manet':
+                    fc_feats = self.manet(fc_feats, state[0])
+                output, state = self.core(torch.cat([xt, fc_feats], 1), state)
+                
+            if token_idx >= 0:
                 output = F.log_softmax(self.logit(self.dropout(output)))
                 outputs.append(output)
             
-        # only returns outputs of seq input 
+        # only returns outputs of seq input
         # output size is: B x L x V (where L is truncated lengths
         # which are different for different batch)
         return torch.cat([_.unsqueeze(1) for _ in outputs], 1)
@@ -187,11 +218,15 @@ class CaptionModel(nn.Module):
         
         unfinished = fc_feats.data.new(batch_size).fill_(1).byte()
         
-        for t in range(self.seq_length):
-            if t == 0:
+        # -- if <image feature> is input at the first step, use index -1
+        start_i = -1 if self.model_type == 'standard' else 0
+        end_i = self.seq_length - 1
+        
+        for token_idx in range(start_i, end_i):
+            if token_idx == -1:
                 xt = fc_feats
             else:
-                if t == 1: # input <bos>
+                if token_idx == 0: # input <bos>
                     it = fc_feats.data.new(batch_size).long().fill_(self.bos_index)
                 else:
                     sampleLogprobs, it = torch.max(logprobs.data, 1)
@@ -199,7 +234,7 @@ class CaptionModel(nn.Module):
                     
                 xt = self.embed(Variable(it, requires_grad=False))
 
-            if t >= 2:
+            if t >= 1:
                 unfinished = unfinished * (it > 0)
                 # requires EOS token = 0
                 if unfinished.sum() == 0:
@@ -209,198 +244,13 @@ class CaptionModel(nn.Module):
                 seq.append(it) 
                 seqLogprobs.append(sampleLogprobs.view(-1))
 
-            output, state = self.core(xt, state)
-            logprobs = F.log_softmax(self.logit(output))
-
-        return torch.cat([_.unsqueeze(1) for _ in seq], 1), torch.cat([_.unsqueeze(1) for _ in seqLogprobs], 1)
-    
-    def sample_beam(self, feats, opt={}):
-        beam_size = opt.get('beam_size', 5)
-        fc_feats = self.feat_pool(feats)
-        batch_size = fc_feats.size(0)
-        
-        seq = torch.LongTensor(self.seq_length, batch_size).zero_()
-        seqLogprobs = torch.FloatTensor(self.seq_length, batch_size)
-        # lets process every image independently for now, for simplicity
-
-        self.done_beams = [[] for _ in range(batch_size)]
-        for k in range(batch_size):
-            state = self.init_hidden(beam_size)
-
-            beam_seq = torch.LongTensor(self.seq_length, beam_size).zero_()
-            beam_seq_logprobs = torch.FloatTensor(self.seq_length, beam_size).zero_()
-            beam_logprobs_sum = torch.zeros(beam_size) # running sum of logprobs for each beam
-            
-            for t in range(self.seq_length):
-                if t == 0:
-                    xt = fc_feats[k].expand(beam_size, self.video_encoding_size)
-                elif t == 1: # input <bos>
-                    it = fc_feats.data.new(beam_size).long().fill_(self.bos_index)
-                    xt = self.embed(Variable(it, requires_grad=False))
-                else:
-                    """perform a beam merge. that is,
-                    for every previous beam we now many new possibilities to branch out
-                    we need to resort our beams to maintain the loop invariant of keeping
-                    the top beam_size most likely sequences."""
-                    logprobsf = logprobs.float() # lets go to CPU for more efficiency in indexing operations
-                    ys,ix = torch.sort(logprobsf,1,True) # sorted array of logprobs along each previous beam (last true = descending)
-                    candidates = []
-                    cols = min(beam_size, ys.size(1))
-                    rows = beam_size
-                    if t == 2:  # at first time step only the first beam is active
-                        rows = 1
-                    for c in range(cols):
-                        for q in range(rows):
-                            # compute logprob of expanding beam q with word in (sorted) position c
-                            local_logprob = ys[q,c]
-                            candidate_logprob = beam_logprobs_sum[q] + local_logprob
-                            candidates.append({'c':ix.data[q,c], 'q':q, 'p':candidate_logprob.data[0], 'r':local_logprob.data[0]})
-                    candidates = sorted(candidates, key=lambda x: -x['p'])
-                    
-                    # construct new beams
-                    new_state = [_.clone() for _ in state]
-                    if t > 2:
-                        # well need these as reference when we fork beams around
-                        beam_seq_prev = beam_seq[:t-2].clone()
-                        beam_seq_logprobs_prev = beam_seq_logprobs[:t-2].clone()
-                        
-                    for vix in range(beam_size):
-                        v = candidates[vix]
-                        # fork beam index q into index vix
-                        if t > 2:
-                            beam_seq[:t-2, vix] = beam_seq_prev[:, v['q']]
-                            beam_seq_logprobs[:t-2, vix] = beam_seq_logprobs_prev[:, v['q']]
-
-                        # rearrange recurrent states
-                        for state_ix in range(len(new_state)):
-                            # copy over state in previous beam q to new beam at vix
-                            new_state[state_ix][0, vix] = state[state_ix][0, v['q']] # dimension one is time step
-
-                        # append new end terminal at the end of this beam
-                        beam_seq[t-2, vix] = v['c'] # c'th word is the continuation
-                        beam_seq_logprobs[t-2, vix] = v['r'] # the raw logprob here
-                        beam_logprobs_sum[vix] = v['p'] # the new (sum) logprob along this beam
-
-                        if v['c'] == 0 or t == self.seq_length-1:
-                            # END token special case here, or we reached the end.
-                            # add the beam to a set of done beams
-                            self.done_beams[k].append({'seq': beam_seq[:, vix].clone(), 
-                                                'logps': beam_seq_logprobs[:, vix].clone(),
-                                                'p': beam_logprobs_sum[vix],
-                                                'ppl': np.exp(-beam_logprobs_sum[vix]/(t-2))
-                                                })
-        
-                    # encode as vectors
-                    it = beam_seq[t-2]
-                    xt = self.embed(Variable(it.cuda()))
-                
-                if t >= 2:
-                    state = new_state
-
+            if self.model_type == 'standard':
                 output, state = self.core(xt, state)
-                logprobs = F.log_softmax(self.logit(output))
-
-            #self.done_beams[k] = sorted(self.done_beams[k], key=lambda x: -x['p'])
-            self.done_beams[k] = sorted(self.done_beams[k], key=lambda x: x['ppl'])
-            seq[:, k] = self.done_beams[k][0]['seq'] # the first beam has highest cumulative score
-            seqLogprobs[:, k] = self.done_beams[k][0]['logps']
-            
-        # return the samples and their log likelihoods
-        return seq.transpose(0, 1), seqLogprobs.transpose(0, 1)
-
-class MANet(nn.Module):
-    """
-    Attention class
-    """
-    def __init__(self, video_encoding_size, rnn_size, num_feats):
-        super(MANet, self).__init__()
-        self.video_encoding_size = video_encoding_size
-        self.rnn_size = rnn_size
-        self.num_feats = num_feats
-        
-        self.f_feat_m = nn.Linear(self.video_encoding_size, self.num_feats)
-        self.f_h_m = nn.Linear(self.rnn_size, self.num_feats)
-        self.align_m = nn.Linear(self.num_feats, self.num_feats)
-        
-    def forward(self, x, h):
-        f_feat = self.f_feat_m(x)
-        f_h = self.f_h_m(h.squeeze(0)) # assuming now num_layers is 1
-        att_weight = nn.Softmax()(self.align_m(nn.Tanh()(f_feat + f_h)))
-        att_weight = att_weight.unsqueeze(2).expand(x.size(0), self.num_feats, self.video_encoding_size/self.num_feats)
-        att_weight = att_weight.contiguous().view(x.size(0), x.size(1))
-        return x*att_weight
-
-class ConcatCaptionModel(CaptionModel):
-    """
-    concat feature and word embedding at every time step
-    """
-    def __init__(self, opt):
-        super(ConcatCaptionModel, self).__init__(opt)
-        
-        if self.model_type == 'manet':
-            self.manet = MANet(self.video_encoding_size, self.rnn_size, self.num_feats)
-
-    def forward(self, feats, seq):
-
-        fc_feats = self.feat_pool(feats)
-        fc_feats = self.feat_expander(fc_feats)
-        
-        batch_size = fc_feats.size(0)
-        state = self.init_hidden(batch_size)
-        outputs = []
-
-        for i in range(seq.size(1)):
-            it = seq[:,i].clone()
-            # break if all the sequences end
-            if i >= 1 and seq[:,i].data.sum() == 0:
-                break
-            xt = self.embed(it)
-
-            if self.model_type == 'manet':
-                fc_feats = self.manet(fc_feats, state[0])
+            else:    
+                if self.model_type == 'manet':
+                    fc_feats = self.manet(fc_feats, state[0])
+                output, state = self.core(torch.cat([xt, fc_feats], 1), state)
                 
-            output, state = self.core(torch.cat([xt, fc_feats], 1), state)
-            output = F.log_softmax(self.logit(self.dropout(output)))
-            outputs.append(output)
-
-        # output size is: B x L x V
-        return torch.cat([_.unsqueeze(1) for _ in outputs], 1)
-
-    def sample(self, feats, opt={}):
-        beam_size = opt.get('beam_size', 1)
-        if beam_size > 1:
-            return self.sample_beam(feats, opt)
-
-        fc_feats = self.feat_pool(feats)
-        batch_size = fc_feats.size(0)
-        state = self.init_hidden(batch_size)
-
-        seq = []
-        seqLogprobs = []
-        for t in range(self.seq_length + 1):
-            if t == 0: # input <bos>
-                it = fc_feats.data.new(batch_size).long().zero_()
-            else:
-                sampleLogprobs, it = torch.max(logprobs.data, 1)
-                it = it.view(-1).long()
-
-            xt = self.embed(Variable(it, requires_grad=False))
-
-            if t >= 1:
-                if t == 1:
-                    unfinished = it > 0
-                else:
-                    unfinished = unfinished * (it > 0)
-                if unfinished.sum() == 0:
-                    break
-                it = it * unfinished.type_as(it)
-                seq.append(it) #seq[t] the input of t+2 time step
-                seqLogprobs.append(sampleLogprobs.view(-1))
-
-            if self.model_type == 'manet':
-                fc_feats = self.manet(fc_feats, state[0])
-                
-            output, state = self.core(torch.cat([xt, fc_feats], 1), state)
             logprobs = F.log_softmax(self.logit(output))
 
         return torch.cat([_.unsqueeze(1) for _ in seq], 1), torch.cat([_.unsqueeze(1) for _ in seqLogprobs], 1)
@@ -409,8 +259,6 @@ class ConcatCaptionModel(CaptionModel):
         beam_size = opt.get('beam_size', 5)
         fc_feats = self.feat_pool(feats)
         batch_size = fc_feats.size(0)
-        
-        assert beam_size <= self.vocab_size + 1
         
         seq = torch.LongTensor(self.seq_length, batch_size).zero_()
         seqLogprobs = torch.FloatTensor(self.seq_length, batch_size)
@@ -424,9 +272,16 @@ class ConcatCaptionModel(CaptionModel):
             beam_seq = torch.LongTensor(self.seq_length, beam_size).zero_()
             beam_seq_logprobs = torch.FloatTensor(self.seq_length, beam_size).zero_()
             beam_logprobs_sum = torch.zeros(beam_size) # running sum of logprobs for each beam
-            for t in range(self.seq_length + 1):
-                if t == 0: # input <bos>
-                    it = fc_feats.data.new(beam_size).long().zero_()
+            
+            # -- if <image feature> is input at the first step, use index -1
+            start_i = -1 if self.model_type == 'standard' else 0
+            end_i = self.seq_length - 1
+            
+            for token_idx in range(start_i, end_i):
+                if token_idx == -1:
+                    xt = fc_feats_k
+                elif token_idx == 0: # input <bos>
+                    it = fc_feats.data.new(beam_size).long().fill_(self.bos_index)
                     xt = self.embed(Variable(it, requires_grad=False))
                 else:
                     """perform a beam merge. that is,
@@ -438,7 +293,7 @@ class ConcatCaptionModel(CaptionModel):
                     candidates = []
                     cols = min(beam_size, ys.size(1))
                     rows = beam_size
-                    if t == 1:  # at first time step only the first beam is active
+                    if token_idx == 1:  # at first time step only the first beam is active
                         rows = 1
                     for c in range(cols):
                         for q in range(rows):
@@ -447,19 +302,20 @@ class ConcatCaptionModel(CaptionModel):
                             candidate_logprob = beam_logprobs_sum[q] + local_logprob
                             candidates.append({'c':ix.data[q,c], 'q':q, 'p':candidate_logprob.data[0], 'r':local_logprob.data[0]})
                     candidates = sorted(candidates, key=lambda x: -x['p'])
-
+                    
                     # construct new beams
                     new_state = [_.clone() for _ in state]
-                    if t > 1:
+                    if token_idx > 1:
                         # well need these as reference when we fork beams around
-                        beam_seq_prev = beam_seq[:t-1].clone()
-                        beam_seq_logprobs_prev = beam_seq_logprobs[:t-1].clone()
+                        beam_seq_prev = beam_seq[:token_idx-1].clone()
+                        beam_seq_logprobs_prev = beam_seq_logprobs[:token_idx-1].clone()
+                        
                     for vix in range(beam_size):
                         v = candidates[vix]
                         # fork beam index q into index vix
-                        if t > 1:
-                            beam_seq[:t-1, vix] = beam_seq_prev[:, v['q']]
-                            beam_seq_logprobs[:t-1, vix] = beam_seq_logprobs_prev[:, v['q']]
+                        if token_idx > 1:
+                            beam_seq[:token_idx-1, vix] = beam_seq_prev[:, v['q']]
+                            beam_seq_logprobs[:token_idx-1, vix] = beam_seq_logprobs_prev[:, v['q']]
 
                         # rearrange recurrent states
                         for state_ix in range(len(new_state)):
@@ -467,35 +323,40 @@ class ConcatCaptionModel(CaptionModel):
                             new_state[state_ix][0, vix] = state[state_ix][0, v['q']] # dimension one is time step
 
                         # append new end terminal at the end of this beam
-                        beam_seq[t-1, vix] = v['c'] # c'th word is the continuation
-                        beam_seq_logprobs[t-1, vix] = v['r'] # the raw logprob here
+                        beam_seq[token_idx-1, vix] = v['c'] # c'th word is the continuation
+                        beam_seq_logprobs[token_idx-1, vix] = v['r'] # the raw logprob here
                         beam_logprobs_sum[vix] = v['p'] # the new (sum) logprob along this beam
 
-                        if v['c'] == 0 or t == self.seq_length:
+                        if v['c'] == 0 or token_idx == self.seq_length-2:
                             # END token special case here, or we reached the end.
                             # add the beam to a set of done beams
                             self.done_beams[k].append({'seq': beam_seq[:, vix].clone(), 
                                                 'logps': beam_seq_logprobs[:, vix].clone(),
-                                                'p': beam_logprobs_sum[vix]
+                                                'p': beam_logprobs_sum[vix],
+                                                'ppl': np.exp(-beam_logprobs_sum[vix]/(token_idx-1))
                                                 })
         
                     # encode as vectors
-                    it = beam_seq[t-1]
+                    it = beam_seq[token_idx-1]
                     xt = self.embed(Variable(it.cuda()))
                 
-                if t >= 1:
+                if token_idx >= 1:
                     state = new_state
 
-                if self.model_type == 'manet':
-                    fc_feats_k = self.manet(fc_feats_k, state[0])
-                
-                output, state = self.core(torch.cat([xt, fc_feats_k], 1), state)
+                if self.model_type == 'standard':
+                    output, state = self.core(xt, state)
+                else:    
+                    if self.model_type == 'manet':
+                        fc_feats_k = self.manet(fc_feats_k, state[0])
+                    output, state = self.core(torch.cat([xt, fc_feats_k], 1), state)
+
                 logprobs = F.log_softmax(self.logit(output))
 
-            self.done_beams[k] = sorted(self.done_beams[k], key=lambda x: -x['p'])
+            #self.done_beams[k] = sorted(self.done_beams[k], key=lambda x: -x['p'])
+            self.done_beams[k] = sorted(self.done_beams[k], key=lambda x: x['ppl'])
             seq[:, k] = self.done_beams[k][0]['seq'] # the first beam has highest cumulative score
             seqLogprobs[:, k] = self.done_beams[k][0]['logps']
+            
         # return the samples and their log likelihoods
         return seq.transpose(0, 1), seqLogprobs.transpose(0, 1)
-
 

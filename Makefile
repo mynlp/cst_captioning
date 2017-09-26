@@ -27,16 +27,16 @@ VAL_SPLIT?=val
 TEST_SPLIT?=test
 DATA_ID=$(TRAIN_DATASET)$(TRAIN_SPLIT)_$(VAL_DATASET)$(VAL_SPLIT)_$(TEST_DATASET)$(TEST_SPLIT)
 
-LEARNING_RATE?=0.001
-BATCH_SIZE?=64
-TEST_BATCH_SIZE?=64
+LEARNING_RATE?=0.0001
+BATCH_SIZE?=128
+TEST_BATCH_SIZE?=128
 TRAIN_SEQ_PER_IMG?=20
 TEST_SEQ_PER_IMG?=20
 RNN_SIZE?=512
 TEST_ONLY?=0
 
 MAX_PATIENCE?=5 # FOR EARLY STOPPING
-SAVE_CHECKPOINT_FROM=1
+SAVE_CHECKPOINT_FROM=100
 FEAT_SET=c3d
 
 MAX_ITERS?=20000
@@ -142,7 +142,7 @@ train: $(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
 		--beam_size $(BEAM_SIZE) --max_patience $(MAX_PATIENCE) --compare_ppl $(COMPARE_PPL) --eval_metrics Loss \
 		--language_eval $(VAL_LANG_EVAL) --checkpoint_path $(MODEL_DIR)/$(EXP_NAME) --max_iters $(MAX_ITERS) --rnn_size $(RNN_SIZE) \
 		--train_seq_per_img $(TRAIN_SEQ_PER_IMG) --test_seq_per_img $(TEST_SEQ_PER_IMG) \
-		--batch_size $(BATCH_SIZE) --test_batch_size $(TEST_BATCH_SIZE) --learning_rate $(LEARNING_RATE) \
+		--batch_size $(BATCH_SIZE) --test_batch_size $(BATCH_SIZE) --learning_rate $(LEARNING_RATE) \
 		--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) \
 		--test_only $(TEST_ONLY) \
 		--id $(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID) \
