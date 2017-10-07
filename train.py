@@ -15,14 +15,18 @@ import logging
 from datetime import datetime
 
 from dataloader import DataLoader
-from model import CaptionModel, LanguageModelCriterion
+from model import CaptionModel, LanguageModelCriterion, RewardCriterion
 
 import utils
 import opts
 
+import sys
+sys.path.append("cider")
+from pyciderevalcap.ciderD.ciderD import CiderD
+
 logger = logging.getLogger(__name__)
 
-def train(model, criterion, optimizer, train_loader, val_loader, opt):
+def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criterion=None):
     
     infos = {'iter': 0, 
              'epoch': 0, 
@@ -32,7 +36,11 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt):
             }
     
     checked = False
+    scst_training = False
     
+    if opt.use_scst == 1:
+        CiderD_scorer = CiderD(df=opt.train_cached_tokens)
+        
     while True:
         t_start = time.time()
         model.train()
@@ -48,16 +56,30 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt):
             
         optimizer.zero_grad()
         model.set_seq_per_img(train_loader.get_seq_per_img())
-        pred = model(feats, labels)
         
-        loss = criterion(pred, labels[:,1:], masks[:,1:])
+        if scst_training and opt.use_scst == 1:
+            gen_result, sample_logprobs = model.sample(feats, {'sample_max':0})
+            # greedy decoding baseline
+            greedy_res, _ = model.sample([Variable(f.data, volatile=True) for f in feats], {'sample_max': 1})
+            reward, cider_score = utils.get_self_critical_reward(greedy_res, gen_result, data['gts'], CiderD_scorer)
+            loss = rl_criterion(gen_result, sample_logprobs, Variable(torch.from_numpy(reward).float().cuda(), requires_grad=False))
+            
+        else:
+            pred = model(feats, labels)
+            loss = criterion(pred, labels[:,1:], masks[:,1:])
+        
         loss.backward()
         clip_grad_norm(model.parameters(), opt.grad_clip)
         optimizer.step()
         
         if infos['iter'] % opt.print_log_interval == 0:
             elapsed_time = time.time() - t_start
-            logger.info('Epoch %d, Iter %d: %f (%.3fs/iter)', 
+            if scst_training and opt.use_scst == 1:
+                logger.info('Epoch %d, Iter %d, Loss %f, Reward %f, Cider-D %.4f, (%.3fs/iter)', 
+                        infos['epoch'], infos['iter'], loss.data[0], 
+                            np.mean(reward[:,0]), cider_score, elapsed_time)
+            else:
+                logger.info('Epoch %d, Iter %d: %f (%.3fs/iter)', 
                         infos['epoch'], infos['iter'], loss.data[0], elapsed_time)
         
         if (infos['epoch'] >= opt.save_checkpoint_from and 
@@ -76,6 +98,10 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt):
         if infos['epoch'] < train_loader.get_current_epoch():
             infos['epoch'] = train_loader.get_current_epoch()
             checked = False
+        
+        if opt.use_scst == 1 and infos['epoch'] >= opt.use_scst_after:
+            #logger.info('Start training using SCST objective...')
+            scst_training = True
         
         if infos['epoch'] - infos['best_epochs'].get(opt.eval_metrics[0], sys.maxint) > opt.max_patience or \
             infos['epoch'] >= opt.max_epochs or \
@@ -254,20 +280,29 @@ if __name__ == '__main__':
     
     logger.info('Building model...')
     model = CaptionModel(opt)
-    criterion = LanguageModelCriterion()
+    
+    xe_criterion = LanguageModelCriterion()
+    
+    if opt.use_scst == 1:
+        rl_criterion = RewardCriterion()
     
     if torch.cuda.is_available():
         model.cuda()
-        criterion.cuda()
+        xe_criterion.cuda()
+        if opt.use_scst == 1:
+            rl_criterion.cuda()
     
     if opt.test_only == 1:
-        test(model, criterion, test_loader, opt)
+        test(model, xe_criterion, test_loader, opt)
         
     else:    
         if not os.path.exists(opt.checkpoint_path):
             os.makedirs(opt.checkpoint_path)
             
         optimizer = optim.Adam(model.parameters(), lr=opt.learning_rate)
-        infos = train(model, criterion, optimizer, train_loader, val_loader, opt)
+        if opt.use_scst == 1:
+            infos = train(model, xe_criterion, optimizer, train_loader, val_loader, opt, rl_criterion=rl_criterion)
+        else:
+            infos = train(model, xe_criterion, optimizer, train_loader, val_loader, opt)
         test(model, criterion, test_loader, opt, infos)
         

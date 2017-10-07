@@ -82,6 +82,7 @@ class DataLoader():
             mask_batch = torch.FloatTensor(self.batch_size * self.seq_per_img, self.seq_length).zero_()
         
         videoids_batch = []
+        gts = []
 
         for ii in range(self.batch_size):
             idx = self.index[self.iterator]
@@ -114,6 +115,9 @@ class DataLoader():
                     
                 il = ii*self.seq_per_img
                 label_batch[il:il+self.seq_per_img] = seq
+                
+                # Used for reward evaluation
+                gts.append(self.label_h5['labels'][self.label_start_ix[idx]: self.label_end_ix[idx]])
 
             self.iterator += 1
             if self.iterator >= self.num_videos:
@@ -135,6 +139,7 @@ class DataLoader():
                 
             data['labels'] = label_batch
             data['masks'] = mask_batch
+            data['gts'] = gts
 
         return data
 

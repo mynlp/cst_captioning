@@ -9,6 +9,22 @@ def to_contiguous(tensor):
         return tensor
     else:
         return tensor.contiguous()
+
+class RewardCriterion(nn.Module):
+    def __init__(self):
+        super(RewardCriterion, self).__init__()
+
+    def forward(self, seq, sample_logprobs, reward):
+        
+        sample_logprobs = to_contiguous(sample_logprobs).view(-1)
+        reward = to_contiguous(reward).view(-1)
+        mask = (seq>0).float()
+        # shift to the right to count for the <eos> token
+        mask = to_contiguous(torch.cat([mask.new(mask.size(0), 1).fill_(1), mask[:, :-1]], 1)).view(-1)
+        output = - sample_logprobs * reward * Variable(mask)
+        output = torch.sum(output) / torch.sum(mask)
+
+        return output
     
 class LanguageModelCriterion(nn.Module):
     def __init__(self):
@@ -205,7 +221,10 @@ class CaptionModel(nn.Module):
         return torch.cat([_.unsqueeze(1) for _ in outputs], 1)
 
     def sample(self, feats, opt={}):
+        sample_max = opt.get('sample_max', 1)
         beam_size = opt.get('beam_size', 1)
+        temperature = opt.get('temperature', 1.0)
+        
         if beam_size > 1:
             return self.sample_beam(feats, opt)
 
@@ -228,13 +247,24 @@ class CaptionModel(nn.Module):
             else:
                 if token_idx == 0: # input <bos>
                     it = fc_feats.data.new(batch_size).long().fill_(self.bos_index)
-                else:
+                elif sample_max == 1:
                     sampleLogprobs, it = torch.max(logprobs.data, 1)
                     it = it.view(-1).long()
+                else:
+                    if temperature == 1.0:
+                        prob_prev = torch.exp(logprobs.data).cpu() # fetch prev distribution: shape Nx(M+1)
+                    else:
+                        # scale logprobs by temperature
+                        prob_prev = torch.exp(torch.div(logprobs.data, temperature)).cpu()
+                    it = torch.multinomial(prob_prev, 1).cuda()
+                    # gather the logprobs at sampled positions
+                    sampleLogprobs = logprobs.gather(1, Variable(it, requires_grad=False)) 
+                    # and flatten indices for downstream processing
+                    it = it.view(-1).long() 
                     
                 xt = self.embed(Variable(it, requires_grad=False))
 
-            if t >= 1:
+            if token_idx >= 1:
                 unfinished = unfinished * (it > 0)
                 # requires EOS token = 0
                 if unfinished.sum() == 0:

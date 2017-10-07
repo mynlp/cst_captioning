@@ -46,6 +46,11 @@ def parse_opts():
     parser.add_argument('--save_checkpoint_from', type=int, default=20, help='Start saving checkpoint from this epoch')
     parser.add_argument('--save_checkpoint_every', type=int, default=1, help='how often to save a model checkpoint in epochs?')
     
+    
+    parser.add_argument('--use_scst', type=int, default=0, help='Use scst training')
+    parser.add_argument('--use_scst_after', type=int, default=30, help='Start scst training after this epoch')
+    parser.add_argument('--train_cached_tokens', type=str, default=30, help='Path to idx document frequencies to cal Cider on training data')
+    
     parser.add_argument('--checkpoint_path', type=str, default='output/model', help='folder to save checkpoints into (empty = this folder)')
     parser.add_argument('--language_eval', type=int, default=1, help='Evaluate language as well (1 = yes, 0 = no)? BLEU/CIDEr/METEOR/ROUGE_L? requires coco-caption code from Github.')
     parser.add_argument('--eval_metrics', default=['Loss'], nargs='+', choices=['Loss', 'Bleu_4', 'METEOR', 'ROUGE_L', 'CIDEr', 'MSRVTT'], help='Evaluation metrics')
@@ -62,9 +67,8 @@ def parse_opts():
     parser.add_argument('--num_layers', type=int, default=1, help='number of layers in the lstm ')
     parser.add_argument('--print_att_coef', type=int, default=0, help='0: no attention, 1: attention with num_chunks')
     
-    parser.add_argument('--model_type', type=str, default='standard', choices=['standard', 'concat', 'manet'], help='Type of models')
+    parser.add_argument('--model_type', type=str, default='standard', choices=['standard', 'concat', 'manet', 'scst'], help='Type of models')
     parser.add_argument('--attention_size', type=int, default=512, help='size of the the attentional input vector')
-    parser.add_argument('--use_category', type=int, default=0, help='0: no category, 1: concat with image embedding, 2: use as start token, 3: use as start token + finetune')
     parser.add_argument('--num_category', type=int, default=20, help='number of category')
     
     # parser.add_argument('--eval_criteria', 'CIDEr', 'criteria to select model during cross validation: loss, CIDEr, METEOR, etc (language score)')

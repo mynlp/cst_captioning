@@ -16,9 +16,9 @@ DATASETS=yt2t msrvtt msrvtt2017 tvvtt
 WORD_COUNT_THRESHOLD?=3  # in output/metadata this threshold was 0; was 3 in output/metadata2017
 MAX_SEQ_LEN?=30          # in output/metadata seqlen was 20; was 30 in output/metadata2017
 
-GID?=3
+GID?=5
 
-DATASET?=yt2t
+DATASET?=msrvtt
 TRAIN_DATASET?=$(DATASET)
 VAL_DATASET?=$(DATASET)
 TEST_DATASET?=$(DATASET)
@@ -36,7 +36,7 @@ RNN_SIZE?=512
 TEST_ONLY?=0
 
 MAX_PATIENCE?=5 # FOR EARLY STOPPING
-SAVE_CHECKPOINT_FROM=100
+SAVE_CHECKPOINT_FROM?=20
 FEAT_SET=c3d
 
 MAX_ITERS?=20000
@@ -56,6 +56,7 @@ CAT_TYPE=glove
 LOGLEVEL?=INFO
 USE_SS?=0
 USE_ROBUST?=0
+USE_SCST?=0
 
 FEAT1?=resnet
 FEAT2?=c3d
@@ -114,6 +115,12 @@ create_frameinfo: $(foreach s,$(SPLITS),$(patsubst %,$(META_DIR)/%_$(s)_frameinf
 	       --split $(call get_split,$(notdir $@)) \
 	       --input_dir $(IN_DIR) --img_type rgb
 
+### create cached of document frequency for Cider computation
+prepro_ngrams: $(foreach s,$(SPLITS),$(patsubst %,$(META_DIR)/%_$(s)_cidercache.pkl,$(DATASETS)))
+.SECONDEXPANSION:
+%_cidercache.pkl: $$(firstword $$(subst _, ,$$@))_train_vocab.json %_proprocessedtokens.json
+	python prepro_ngrams.py $^ $@ --output_words
+
 #####################################################################################################################
 
 noop=
@@ -146,8 +153,9 @@ train: $(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
 		--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) \
 		--test_only $(TEST_ONLY) \
 		--id $(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID) \
+		--train_cached_tokens $(META_DIR)/$(TRAIN_DATASET)_train_cidercache.pkl --use_scst_after 30 --use_scst $(USE_SCST) \
 		--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) 
-		#2>&1 | tee $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).log 
+		#  2>&1 | tee $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).log 
 
 ###########################
 
