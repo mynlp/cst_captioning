@@ -50,6 +50,7 @@ def parse_opts():
     parser.add_argument('--use_scst', type=int, default=0, help='Use scst training')
     parser.add_argument('--use_scst_after', type=int, default=30, help='Start scst training after this epoch')
     parser.add_argument('--train_cached_tokens', type=str, default=30, help='Path to idx document frequencies to cal Cider on training data')
+    parser.add_argument('--expand_feat', type=int, default=0, help='To expand features when sampling (to multiple captions)')
     
     parser.add_argument('--checkpoint_path', type=str, default='output/model', help='folder to save checkpoints into (empty = this folder)')
     parser.add_argument('--language_eval', type=int, default=1, help='Evaluate language as well (1 = yes, 0 = no)? BLEU/CIDEr/METEOR/ROUGE_L? requires coco-caption code from Github.')

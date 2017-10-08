@@ -74,7 +74,7 @@ def get_self_critical_reward(greedy_res, gen_result, data_gts, CiderD_scorer):
     #_, scores = Bleu(4).compute_score(gts, res)
     #scores = np.array(scores[3])
     res = [{'image_id':i, 'caption': res[i]} for i in range(2 * batch_size)]
-    gts = {i: gts[i % batch_size] for i in range(2 * batch_size)}
+    gts = {i: gts[i % batch_size // 20] for i in range(2 * batch_size)}
     
     cider_score, scores = CiderD_scorer.compute_score(gts, res)
 

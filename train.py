@@ -37,9 +37,6 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criteri
     
     checked = False
     scst_training = False
-    
-    if opt.use_scst == 1:
-        CiderD_scorer = CiderD(df=opt.train_cached_tokens)
         
     while True:
         t_start = time.time()
@@ -57,12 +54,22 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criteri
         optimizer.zero_grad()
         model.set_seq_per_img(train_loader.get_seq_per_img())
         
-        if scst_training and opt.use_scst == 1:
-            gen_result, sample_logprobs = model.sample(feats, {'sample_max':0})
+        if scst_training:
+            gen_result, sample_logprobs = model.sample(feats, {'sample_max':0, 'expand_feat': opt.expand_feat})
             # greedy decoding baseline
-            greedy_res, _ = model.sample([Variable(f.data, volatile=True) for f in feats], {'sample_max': 1})
-            reward, cider_score = utils.get_self_critical_reward(greedy_res, gen_result, data['gts'], CiderD_scorer)
+            greedy_res, _ = model.sample([Variable(f.data, volatile=True) for f in feats],
+                                         {'sample_max': 1, 'expand_feat': opt.expand_feat})
+            reward, cider_score = utils.get_self_critical_reward(greedy_res, gen_result, data['gts'], 
+                                                                 CiderD_scorer, train_loader.get_seq_per_img())
             loss = rl_criterion(gen_result, sample_logprobs, Variable(torch.from_numpy(reward).float().cuda(), requires_grad=False))
+            sents = utils.decode_sequence(opt.vocab, gen_result)
+        
+            for jj, sent in enumerate(sents):
+                if opt.expand_feat == 1:
+                    video_id = data['ids'][jj//train_loader.get_seq_per_img()]
+                else:
+                    video_id = data['ids'][jj]
+                logger.debug('[%d] video %s: %s' %(jj, video_id, sent))
             
         else:
             pred = model(feats, labels)
@@ -99,9 +106,10 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criteri
             infos['epoch'] = train_loader.get_current_epoch()
             checked = False
         
-        if opt.use_scst == 1 and infos['epoch'] >= opt.use_scst_after:
-            #logger.info('Start training using SCST objective...')
+        if opt.use_scst == 1 and infos['epoch'] >= opt.use_scst_after and not scst_training:
+            logger.info('Start training using SCST objective...')
             scst_training = True
+            CiderD_scorer = CiderD(df=opt.train_cached_tokens)
         
         if infos['epoch'] - infos['best_epochs'].get(opt.eval_metrics[0], sys.maxint) > opt.max_patience or \
             infos['epoch'] >= opt.max_epochs or \
@@ -179,7 +187,7 @@ def test(model, criterion, loader, opt, infos={}):
     
     for ii, eval_metric in enumerate(opt.eval_metrics):
         if opt.test_only == 1:
-            checkpoint_pkl = os.path.join(opt.checkpoint_path, opt.id + '_' + eval_metric + '.pkl')
+            checkpoint_pkl = os.path.join(opt.checkpoint_path, opt.id + '_' + eval_metric + '.pth')
             logger.info('Loading checkpoint: %s', checkpoint_pkl)
             model.load_state_dict(torch.load(checkpoint_pkl))
         else:
@@ -304,5 +312,5 @@ if __name__ == '__main__':
             infos = train(model, xe_criterion, optimizer, train_loader, val_loader, opt, rl_criterion=rl_criterion)
         else:
             infos = train(model, xe_criterion, optimizer, train_loader, val_loader, opt)
-        test(model, criterion, test_loader, opt, infos)
+        test(model, xe_criterion, test_loader, opt, infos)
         

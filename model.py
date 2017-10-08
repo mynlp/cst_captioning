@@ -224,11 +224,14 @@ class CaptionModel(nn.Module):
         sample_max = opt.get('sample_max', 1)
         beam_size = opt.get('beam_size', 1)
         temperature = opt.get('temperature', 1.0)
+        expand_feat= opt.get('expand_feat', 0)
         
         if beam_size > 1:
             return self.sample_beam(feats, opt)
 
         fc_feats = self.feat_pool(feats)
+        if expand_feat == 1:  
+            fc_feats = self.feat_expander(fc_feats)
         batch_size = fc_feats.size(0)
         state = self.init_hidden(batch_size)
 
