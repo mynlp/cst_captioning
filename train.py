@@ -10,12 +10,12 @@ import sys
 import time
 import math
 import json
-
+import uuid
 import logging
 from datetime import datetime
 
 from dataloader import DataLoader
-from model import CaptionModel, LanguageModelCriterion, RewardCriterion
+from model import CaptionModel, CrossEntropyCriterion, RewardCriterion
 
 import utils
 import opts
@@ -30,14 +30,20 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criteri
     
     infos = {'iter': 0, 
              'epoch': 0, 
-             'best_scores': {},
-             'best_iters': {},
-             'best_epochs': {}
+             'best_score': 0,
+             'best_iter': 0,
+             'best_epoch': opt.max_epochs
             }
+    
+    if os.path.isfile(opt.start_from):
+        logger.info('Loading state from: %s', opt.start_from)
+        checkpoint = torch.load(opt.start_from)
+        model.load_state_dict(checkpoint['model'])
+        infos = checkpoint['infos']
     
     checked = False
     scst_training = False
-        
+    
     while True:
         t_start = time.time()
         model.train()
@@ -122,15 +128,15 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criteri
             infos['epoch'] = train_loader.get_current_epoch()
             checked = False
         
-        if infos['epoch'] - infos['best_epochs'].get(opt.eval_metrics[0], sys.maxint) > opt.max_patience or \
-            infos['epoch'] >= opt.max_epochs or \
-            infos['iter'] >= opt.max_iters:
+        if (infos['epoch'] >= opt.max_epochs or \
+            infos['epoch'] - infos['best_epoch'] > opt.max_patience):
             logger.info('>>> Terminating...')
             break
             
     return infos
             
 def validate(model, criterion, loader, opt):
+    
     model.eval()
     loader.reset()
     
@@ -182,8 +188,7 @@ def validate(model, criterion, loader, opt):
     
     if opt.language_eval == 1 and loader.has_label:
         logger.info('>>> Language evaluating ...') 
-        tmp_checkpoint_json = os.path.join(opt.checkpoint_path, 
-                opt.id + '_tmp_predictions.json')
+        tmp_checkpoint_json = os.path.join(opt.model_file + str(uuid.uuid4()) + '.json')
         json.dump(predictions, open(tmp_checkpoint_json, 'w'))
         lang_stats = utils.language_eval(loader.cocofmt_file, tmp_checkpoint_json)
         os.remove(tmp_checkpoint_json)
@@ -194,57 +199,41 @@ def validate(model, criterion, loader, opt):
     
     return results
     
-def test(model, criterion, loader, opt, infos={}):
+def test(model, criterion, loader, opt):
     
-    for ii, eval_metric in enumerate(opt.eval_metrics):
-        if opt.test_only == 1:
-            checkpoint_pkl = os.path.join(opt.checkpoint_path, opt.id + '_' + eval_metric + '.pth')
-            logger.info('Loading checkpoint: %s', checkpoint_pkl)
-            model.load_state_dict(torch.load(checkpoint_pkl))
-        else:
-            logger.info('Best val %s score: %f. Best iter: %d. Best epoch: %d', eval_metric, 
-                        infos['best_scores'].get(eval_metric, 0), 
-                        infos['best_iters'].get(eval_metric, 0),
-                        infos['best_epochs'].get(eval_metric, 0))
+    results = validate(model, criterion, loader, opt)
+    logger.info('Test output: %s', json.dumps(results['scores'], indent=4))
 
-        results = validate(model, criterion, loader, opt)
-        logger.info('Test output: %s', json.dumps(results['scores'], indent=4))
-    
-        checkpoint_json = os.path.join(opt.checkpoint_path, 
-                                    opt.id + '_' + eval_metric + '_test_predictions.json')
-        
-        json.dump(results, open(checkpoint_json, 'w'))
-        logger.info('Wrote output caption to: %s ', checkpoint_json)
+    json.dump(results, open(opt.result_file, 'w'))
+    logger.info('Wrote output caption to: %s ', opt.result_file)
 
 def check_model(model, opt, infos):
     
-    for ii, eval_metric in enumerate(opt.eval_metrics):
-        if eval_metric == 'MSRVTT':
-            current_score = infos['Bleu_4'] + infos['METEOR'] + infos['ROUGE_L'] + infos['CIDEr']
-        else:
-            current_score = infos[eval_metric]
+    if opt.eval_metric == 'MSRVTT':
+        current_score = infos['Bleu_4'] + infos['METEOR'] + infos['ROUGE_L'] + infos['CIDEr']
+    else:
+        current_score = infos[opt.eval_metric]
         
-        # write the full model checkpoint as well if we did better than ever
-        if current_score > infos['best_scores'].get(eval_metric, float('-inf')):
-            infos['best_scores'][eval_metric] = current_score
-            infos['best_iters'][eval_metric] = infos['iter']
-            infos['best_epochs'][eval_metric] = infos['epoch']
+    # write the full model checkpoint as well if we did better than ever
+    if current_score > infos.get('best_score', float('-inf')):
+        infos['best_score'] = current_score
+        infos['best_iter'] = infos['iter']
+        infos['best_epoch'] = infos['epoch']
 
-            logger.info('>>> Found new best [%s] score: %f, at iter: %d, epoch %d', 
-                        eval_metric, current_score, infos['iter'], infos['epoch'])
-            checkpoint_pkl = os.path.join(opt.checkpoint_path, opt.id + '_' + eval_metric + '.pth')
-            torch.save(model.state_dict(), checkpoint_pkl)               
-            logger.info('Wrote checkpoint to: %s', checkpoint_pkl)
-            
-            checkpoint_json = os.path.join(opt.checkpoint_path, 
-                                    opt.id + '_' + eval_metric + '_val_predictions.json')
-            json.dump(infos, open(checkpoint_json, 'w'))
-            logger.info('Wrote output captions to: %s', checkpoint_json)
-        else:
-            logger.info('>>> Current best [%s] score: %f, at iter %d, epoch %d', 
-                    eval_metric, infos['best_scores'][eval_metric], 
-                        infos['best_iters'][eval_metric], 
-                        infos['best_epochs'][eval_metric])
+        logger.info('>>> Found new best [%s] score: %f, at iter: %d, epoch %d', 
+                    opt.eval_metric, current_score, infos['iter'], infos['epoch'])
+        
+        torch.save({'model': model.state_dict(),
+                    'infos': infos,
+                    'opt': opt
+                }, opt.model_file)
+        logger.info('Wrote checkpoint to: %s', opt.model_file)
+        
+    else:
+        logger.info('>>> Current best [%s] score: %f, at iter %d, epoch %d', 
+                    opt.eval_metric, infos['best_score'], 
+                    infos['best_iter'], 
+                    infos['best_epoch'])
         
 if __name__ == '__main__':
     
@@ -300,28 +289,28 @@ if __name__ == '__main__':
     logger.info('Building model...')
     model = CaptionModel(opt)
     
-    xe_criterion = LanguageModelCriterion()
-    
-    if opt.use_scst == 1:
-        rl_criterion = RewardCriterion()
+    xe_criterion = CrossEntropyCriterion()
+    rl_criterion = RewardCriterion()
     
     if torch.cuda.is_available():
         model.cuda()
         xe_criterion.cuda()
-        if opt.use_scst == 1:
-            rl_criterion.cuda()
+        rl_criterion.cuda()
     
-    if opt.test_only == 1:
-        test(model, xe_criterion, test_loader, opt)
-        
-    else:    
-        if not os.path.exists(opt.checkpoint_path):
-            os.makedirs(opt.checkpoint_path)
-            
-        optimizer = optim.Adam(model.parameters(), lr=opt.learning_rate)
-        if opt.use_scst == 1:
-            infos = train(model, xe_criterion, optimizer, train_loader, val_loader, opt, rl_criterion=rl_criterion)
-        else:
-            infos = train(model, xe_criterion, optimizer, train_loader, val_loader, opt)
+    logger.info('Start training...')
+    start = datetime.now()
+    
+    optimizer = optim.Adam(model.parameters(), lr=opt.learning_rate)
+    infos = train(model, xe_criterion, optimizer, train_loader, val_loader, opt, rl_criterion=rl_criterion)
+    logger.info('Best val %s score: %f. Best iter: %d. Best epoch: %d', opt.eval_metric, 
+                    infos['best_score'],  infos['best_iter'], infos['best_epoch'])
+    
+    logger.info('Training time: %s', datetime.now() - start)
+    
+    if opt.result_file is not None:
+        logger.info('Start testing...')
+        start = datetime.now()
         test(model, xe_criterion, test_loader, opt, infos)
-        
+        logger.info('Testing time: %s', datetime.now() - start)
+
+    

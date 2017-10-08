@@ -25,11 +25,9 @@ TEST_DATASET?=$(DATASET)
 TRAIN_SPLIT?=train
 VAL_SPLIT?=val
 TEST_SPLIT?=test
-DATA_ID=$(TRAIN_DATASET)$(TRAIN_SPLIT)_$(VAL_DATASET)$(VAL_SPLIT)_$(TEST_DATASET)$(TEST_SPLIT)
 
 LEARNING_RATE?=0.0001
-BATCH_SIZE?=128
-TEST_BATCH_SIZE?=128
+BATCH_SIZE?=64
 TRAIN_SEQ_PER_IMG?=20
 TEST_SEQ_PER_IMG?=20
 RNN_SIZE?=512
@@ -39,7 +37,7 @@ MAX_PATIENCE?=5 # FOR EARLY STOPPING
 SAVE_CHECKPOINT_FROM?=20
 FEAT_SET=c3d
 
-MAX_ITERS?=20000
+MAX_EPOCHS?=200
 NUM_CHUNKS?=1
 PRINT_ATT_COEF?=0
 BEAM_SIZE?=5
@@ -48,8 +46,8 @@ TODAY=20170831
 EXP_NAME?=exp_$(DATASET)_$(TODAY)
 VAL_LANG_EVAL?=1
 TEST_LANG_EVAL?=1
-COMPARE_PPL?=1
-
+EVAL_METRIC?=CIDEr
+START_FROM?=No
 MODEL_TYPE?=standard
 POOLING?=mp
 CAT_TYPE=glove
@@ -68,7 +66,7 @@ FEAT6?=vgg19
 #FEATS=$(FEAT1) $(FEAT2) $(FEAT3) $(FEAT5) $(FEAT6)
 FEATS=$(FEAT1)
 
-TRAIN_ID=$(DATA_ID)_$(MODEL_TYPE)_$(NUM_CHUNKS)_$(BATCH_SIZE)_$(LEARNING_RATE)
+TRAIN_ID=$(TRAIN_DATASET)_$(MODEL_TYPE)_$(EVAL_METRIC)_$(BATCH_SIZE)_$(LEARNING_RATE)
 
 ###################################################################################################################
 ###
@@ -126,7 +124,9 @@ prepro_ngrams: $(foreach s,$(SPLITS),$(patsubst %,$(META_DIR)/%_$(s)_cidercache.
 noop=
 space=$(noop) $(noop)
 
-train: $(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
+train: $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth
+$(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth: \
+	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
 	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_sequencelabel.h5 \
 	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_sequencelabel.h5 \
 	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_cocofmt.json \
@@ -146,32 +146,39 @@ train: $(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
 		--train_feat_h5 $(patsubst %,$(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))\
 		--val_feat_h5 $(patsubst %,$(FEAT_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))\
 		--test_feat_h5 $(patsubst %,$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))\
-		--beam_size $(BEAM_SIZE) --max_patience $(MAX_PATIENCE) --compare_ppl $(COMPARE_PPL) --eval_metrics Loss \
-		--language_eval $(VAL_LANG_EVAL) --checkpoint_path $(MODEL_DIR)/$(EXP_NAME) --max_iters $(MAX_ITERS) --rnn_size $(RNN_SIZE) \
+		--beam_size $(BEAM_SIZE) --max_patience $(MAX_PATIENCE) --eval_metric $(EVAL_METRIC) \
+		--language_eval $(VAL_LANG_EVAL) --max_epochs $(MAX_EPOCHS) --rnn_size $(RNN_SIZE) \
 		--train_seq_per_img $(TRAIN_SEQ_PER_IMG) --test_seq_per_img $(TEST_SEQ_PER_IMG) \
 		--batch_size $(BATCH_SIZE) --test_batch_size $(BATCH_SIZE) --learning_rate $(LEARNING_RATE) \
 		--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) \
 		--test_only $(TEST_ONLY) \
-		--id $(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID) \
 		--use_ss $(USE_SS) \
 		--train_cached_tokens $(META_DIR)/$(TRAIN_DATASET)_train_cidercache.pkl --use_scst_after $(SAVE_CHECKPOINT_FROM) --use_scst $(USE_SCST) \
 		--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) \
-		2>&1 | tee $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).log 
+		--model_file $@ --start_from $(START_FROM) --result_file $(basename $@)_test.json \
+		2>&1 | tee $(basename $@).log 
 
-###########################
+test: $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID)_test.json
+$(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID)_test.json: \
+	$(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth \
+	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_sequencelabel.h5 \
+	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
+	$(patsubst %,$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))
+	CUDA_VISIBLE_DEVICES=$(GID) python test.py \
+		--model_file $(word 1,$^) \
+		--test_label_h5 $(word 2,$^) \
+		--test_cocofmt_file $(word 3,$^) \
+		--test_feat_h5 $(patsubst %,$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))\
+		--beam_size $(BEAM_SIZE) \
+		--language_eval $(VAL_LANG_EVAL) \
+		--test_seq_per_img $(TEST_SEQ_PER_IMG) \
+		--test_batch_size $(BATCH_SIZE) \
+		--loglevel $(LOGLEVEL) \
+		--result_file $@
 
-METEOR_TOOL=/home/plsang/works/tools/meteor-1.5
-#RUN_FILE=/home/plsang/works/tvv2t/output/submission/description/resnet.txt
-RUN_FILE=/home/plsang/works/captioning.pytorch/output/model/exp_msrvtt2017_20170830/resnetc3dmfccvgg16vgg19_msrvtt2017train_msrvtt2017val_tvvttval_1_64_0.001_ss0_robust0_Loss_test_predictions.txt
+# If you want all intermediates to remain
+# .SECONDARY:
 
-GT16_FILE=/home/plsang/works/v2t2017/input/v2t2016/tv16.ref.meteor
-test:
-	java -Xmx2G -jar $(METEOR_TOOL)/meteor-1.5.jar $(RUN_FILE) $(GT16_FILE) -l en -norm -r 2 -t adq
-
-RUN1_FILE=$(MODEL_DIR)/$(EXP_NAME)/resnetc3dmfccvgg16vgg19_msrvtt2017train_msrvtt2017val_tvvtttest_manet_1_64_0.001_Loss_test_predictions.json
-RUN2_FILE=$(MODEL_DIR)/$(EXP_NAME)/resnetc3dmfccvgg16vgg19_msrvtt2017train_msrvtt2017val_tvvtttest_concat_1_64_0.001_Loss_test_predictions.json
-VTT2017_SUBMIT_DIR=/home/plsang/active/v2t2017/output/result_to_submit/captioning
-convert_v2t2017:
-	python convert_coco2trecvidfmt.py $(RUN1_FILE) $(VTT2017_SUBMIT_DIR)/NII_Hitachi_UIT_R1_primary.txt 
-	python convert_coco2trecvidfmt.py $(RUN2_FILE) $(VTT2017_SUBMIT_DIR)/NII_Hitachi_UIT_R2.txt 
+# You can use the wildcard with .PRECIOUS.
+.PRECIOUS: %.pth
 

@@ -26,9 +26,9 @@ class RewardCriterion(nn.Module):
 
         return output
     
-class LanguageModelCriterion(nn.Module):
+class CrossEntropyCriterion(nn.Module):
     def __init__(self):
-        super(LanguageModelCriterion, self).__init__()
+        super(CrossEntropyCriterion, self).__init__()
 
     def forward(self, pred, target, mask):
         # truncate to the same size

@@ -29,8 +29,8 @@ def decode_sequence(ix_to_word, seq):
 def language_eval(gold_file, pred_file):
     
     # save the current stdout
-    # temp = sys.stdout 
-    # sys.stdout = open(os.devnull, 'w')
+    temp = sys.stdout 
+    sys.stdout = open(os.devnull, 'w')
 
     coco = COCO(gold_file)
     cocoRes = coco.loadRes(pred_file)
@@ -43,7 +43,7 @@ def language_eval(gold_file, pred_file):
         out[metric] = round(score, 3)
 
     # restore the previous stdout    
-    # sys.stdout = temp
+    sys.stdout = temp
     return out
 
 
