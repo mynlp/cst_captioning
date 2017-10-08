@@ -153,6 +153,7 @@ train: $(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
 		--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) \
 		--test_only $(TEST_ONLY) \
 		--id $(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID) \
+		--use_ss $(USE_SS) \
 		--train_cached_tokens $(META_DIR)/$(TRAIN_DATASET)_train_cidercache.pkl --use_scst_after $(SAVE_CHECKPOINT_FROM) --use_scst $(USE_SCST) \
 		--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) \
 		2>&1 | tee $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).log 

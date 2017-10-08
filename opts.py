@@ -46,7 +46,6 @@ def parse_opts():
     parser.add_argument('--save_checkpoint_from', type=int, default=20, help='Start saving checkpoint from this epoch')
     parser.add_argument('--save_checkpoint_every', type=int, default=1, help='how often to save a model checkpoint in epochs?')
     
-    
     parser.add_argument('--use_scst', type=int, default=0, help='Use scst training')
     parser.add_argument('--use_scst_after', type=int, default=30, help='Start scst training after this epoch')
     parser.add_argument('--train_cached_tokens', type=str, default=30, help='Path to idx document frequencies to cal Cider on training data')
@@ -66,11 +65,8 @@ def parse_opts():
     parser.add_argument('--gpuid', type=int, default=7, help='which gpu to use. -1 = use CPU')
     parser.add_argument('--num_chunks', type=int, default=1, help='1: no attention, > 1: attention with num_chunks')
     parser.add_argument('--num_layers', type=int, default=1, help='number of layers in the lstm ')
-    parser.add_argument('--print_att_coef', type=int, default=0, help='0: no attention, 1: attention with num_chunks')
     
     parser.add_argument('--model_type', type=str, default='standard', choices=['standard', 'concat', 'manet', 'scst'], help='Type of models')
-    parser.add_argument('--attention_size', type=int, default=512, help='size of the the attentional input vector')
-    parser.add_argument('--num_category', type=int, default=20, help='number of category')
     
     # parser.add_argument('--eval_criteria', 'CIDEr', 'criteria to select model during cross validation: loss, CIDEr, METEOR, etc (language score)')
     parser.add_argument('--test_checkpoint',  type=str, default='', help='path to the checkpoint needed to be tested')
@@ -79,12 +75,11 @@ def parse_opts():
     parser.add_argument('--compare_ppl', type=int, default=1, help='Compare done beams by ppl instead of logprob')
 
     parser.add_argument('--use_ss', type=int, default=0, help='Use schedule sampling')
-    parser.add_argument('--ss_start_epoch', type=int, default=1, help='Use schedule sampling')
-    parser.add_argument('--ss_start', type=int, default=1, help='Use schedule sampling')
-    parser.add_argument('--ss_end', type=float, default=0.9, help='Use schedule sampling')
-    parser.add_argument('--ss_k', type=int, default=100, help='plot k/(k+exp(x/k)) from x=0 to 400, k=100')
-    parser.add_argument('--draw_loss', type=int, default=0, help='to draw loss or not')
-
+    parser.add_argument('--use_ss_after', type=int, default=0, help='Use schedule sampling')
+    parser.add_argument('--ss_end_prob', type=float, default=0.25, help='Use schedule sampling')
+    parser.add_argument('--ss_increase_prob', type=float, default=0.05, help='ss')
+    parser.add_argument('--ss_increase_every', type=int, default=5, help='epoch')
+    
     parser.add_argument('--use_robust', type=int, default=0, help='Use schedule sampling')
     parser.add_argument('--robust_start_epoch', type=int, default=1, help='Use schedule sampling')
     parser.add_argument('--robust_start', type=int, default=1, help='Use schedule sampling')

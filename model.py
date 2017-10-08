@@ -144,6 +144,7 @@ class CaptionModel(nn.Module):
         self.seq_per_img = opt.train_seq_per_img
         self.model_type = opt.model_type
         self.bos_index = 1 # index of the <bos> token
+        self.ss_prob = 0
         
         self.embed = nn.Embedding(self.vocab_size, self.input_encoding_size)
         self.logit = nn.Linear(self.rnn_size, self.vocab_size)
@@ -160,6 +161,9 @@ class CaptionModel(nn.Module):
         if self.model_type == 'manet':
             self.manet = MANet(self.video_encoding_size, self.rnn_size, self.num_feats)
 
+    def set_ss_prob(self, p):
+        self.ss_prob = p
+        
     def set_seq_per_img(self, x):
         self.seq_per_img = x
         self.feat_expander.set_n(x)
@@ -196,11 +200,27 @@ class CaptionModel(nn.Module):
         for token_idx in range(start_i, end_i):
             if token_idx == -1:
                 xt = fc_feats
-            else:    
-                it = seq[:, token_idx].clone()
+            else:   
+                # token_idx = 0 corresponding to the <BOS> token 
+                # (already encoded in seq)
+                
+                if self.training and token_idx >= 1 and self.ss_prob > 0.0:
+                    sample_prob = fc_feats.data.new(batch_size).uniform_(0, 1)
+                    sample_mask = sample_prob < self.ss_prob
+                    if sample_mask.sum() == 0:
+                        it = seq[:, token_idx].clone()
+                    else:
+                        sample_ind = sample_mask.nonzero().view(-1)
+                        it = seq[:, token_idx].data.clone()
+                        prob_prev = torch.exp(outputs[-1].data) # fetch prev distribution: shape Nx(M+1)
+                        sample_ind_tokens = torch.multinomial(prob_prev, 1).view(-1).index_select(0, sample_ind)
+                        it.index_copy_(0, sample_ind, sample_ind_tokens)
+                        it = Variable(it, requires_grad=False)
+                else:
+                    it = seq[:, token_idx].clone()
                 
                 # break if all the sequences end, which requires EOS token = 0
-                if seq[:, token_idx].data.sum() == 0:
+                if it.data.sum() == 0:
                     break
                 xt = self.embed(it)
                 

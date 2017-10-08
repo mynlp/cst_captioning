@@ -50,6 +50,16 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criteri
             feats = [feat.cuda() for feat in feats]
             labels = labels.cuda()
             masks = masks.cuda()
+        
+        if opt.use_ss == 1 and infos['epoch'] >= opt.use_ss_after:
+            frac = (infos['epoch']-opt.use_ss_after) // opt.ss_increase_every
+            opt.ss_prob = min(opt.ss_increase_prob * frac, opt.ss_end_prob)
+            model.set_ss_prob(opt.ss_prob)
+                
+        if opt.use_scst == 1 and infos['epoch'] >= opt.use_scst_after and not scst_training:
+            logger.info('Start training using SCST objective...')
+            scst_training = True
+            CiderD_scorer = CiderD(df=opt.train_cached_tokens)
             
         optimizer.zero_grad()
         model.set_seq_per_img(train_loader.get_seq_per_img())
@@ -81,13 +91,19 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criteri
         
         if infos['iter'] % opt.print_log_interval == 0:
             elapsed_time = time.time() - t_start
+            
+            log_info = [('Epoch', infos['epoch']),
+                        ('Iter', infos['iter']),
+                        ('Loss', loss.data[0])]
+                        
             if scst_training and opt.use_scst == 1:
-                logger.info('Epoch %d, Iter %d, Loss %f, Reward %f, Cider-D %.4f, (%.3fs/iter)', 
-                        infos['epoch'], infos['iter'], loss.data[0], 
-                            np.mean(reward[:,0]), cider_score, elapsed_time)
-            else:
-                logger.info('Epoch %d, Iter %d: %f (%.3fs/iter)', 
-                        infos['epoch'], infos['iter'], loss.data[0], elapsed_time)
+                log_info += [('Reward', np.mean(reward[:,0])),
+                             ('Cider-D', cider_score)]
+            if opt.use_ss == 1:
+                log_info += [('ss_prob', opt.ss_prob)]
+            
+            log_info += [('Time', elapsed_time)]
+            logger.info('%s', '\t'.join(['{}: {}'.format(k, v) for (k, v) in log_info]))
         
         if (infos['epoch'] >= opt.save_checkpoint_from and 
             infos['epoch'] % opt.save_checkpoint_every == 0 and 
@@ -105,11 +121,6 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criteri
         if infos['epoch'] < train_loader.get_current_epoch():
             infos['epoch'] = train_loader.get_current_epoch()
             checked = False
-        
-        if opt.use_scst == 1 and infos['epoch'] >= opt.use_scst_after and not scst_training:
-            logger.info('Start training using SCST objective...')
-            scst_training = True
-            CiderD_scorer = CiderD(df=opt.train_cached_tokens)
         
         if infos['epoch'] - infos['best_epochs'].get(opt.eval_metrics[0], sys.maxint) > opt.max_patience or \
             infos['epoch'] >= opt.max_epochs or \
