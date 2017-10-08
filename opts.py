@@ -65,21 +65,18 @@ def parse_opts():
     parser.add_argument('--num_layers', type=int, default=1, help='number of layers in the lstm ')
     
     parser.add_argument('--model_type', type=str, default='standard', choices=['standard', 'concat', 'manet', 'scst'], help='Type of models')
-
-    parser.add_argument('--test_only', type=int, default=0, help='1: use the current model (located in current path) for testing')
     parser.add_argument('--beam_size', type=int, default=5, help='Beam search size')
     
     parser.add_argument('--use_ss', type=int, default=0, help='Use schedule sampling')
     parser.add_argument('--use_ss_after', type=int, default=0, help='Use schedule sampling')
-    parser.add_argument('--ss_end_prob', type=float, default=0.25, help='Use schedule sampling')
-    parser.add_argument('--ss_increase_prob', type=float, default=0.05, help='ss')
-    parser.add_argument('--ss_increase_every', type=int, default=5, help='epoch')
+    parser.add_argument('--ss_max_prob', type=float, default=0.25, help='Use schedule sampling')
+    parser.add_argument('--ss_k', type=float, default=30.0, help='plot k/(k+exp(x/k)) from x=0 to 400, k=30')
     
     parser.add_argument('--use_robust', type=int, default=0, help='Use schedule sampling')
     parser.add_argument('--robust_start_epoch', type=int, default=1, help='Use schedule sampling')
     parser.add_argument('--robust_start', type=int, default=1, help='Use schedule sampling')
     parser.add_argument('--robust_end', type=float, default=0.9, help='Use schedule sampling')
-    parser.add_argument('--robust_k', type=int, default=50, help='plot k/(k+exp(x/k)) from x=0 to 400, k=50')
+    parser.add_argument('--robust_k', type=int, default=50, help='plot k/(k+exp(x/k)) from x=0 to 400, k=30')
     
     args = parser.parse_args()
     return args

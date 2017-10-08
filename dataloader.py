@@ -121,9 +121,9 @@ class DataLoader():
 
             self.iterator += 1
             if self.iterator >= self.num_videos:
-                self.iterator = 0
-                self.epoch = self.epoch + 1
                 logger.info('===> Finished loading epoch %d', self.epoch)
+                self.iterator = 0
+                self.epoch += 1
                 if self.mode == 'train':
                     self.shuffle_videos()
         

@@ -31,10 +31,9 @@ BATCH_SIZE?=64
 TRAIN_SEQ_PER_IMG?=20
 TEST_SEQ_PER_IMG?=20
 RNN_SIZE?=512
-TEST_ONLY?=0
 
 MAX_PATIENCE?=5 # FOR EARLY STOPPING
-SAVE_CHECKPOINT_FROM?=20
+SAVE_CHECKPOINT_FROM?=40
 FEAT_SET=c3d
 
 MAX_EPOCHS?=200
@@ -64,7 +63,7 @@ FEAT5?=vgg16
 FEAT6?=vgg19
 
 #FEATS=$(FEAT1) $(FEAT2) $(FEAT3) $(FEAT5) $(FEAT6)
-FEATS=$(FEAT1)
+FEATS=$(FEAT1) $(FEAT2) $(FEAT6)
 
 TRAIN_ID=$(TRAIN_DATASET)_$(MODEL_TYPE)_$(EVAL_METRIC)_$(BATCH_SIZE)_$(LEARNING_RATE)
 
@@ -124,7 +123,59 @@ prepro_ngrams: $(foreach s,$(SPLITS),$(patsubst %,$(META_DIR)/%_$(s)_cidercache.
 noop=
 space=$(noop) $(noop)
 
-train: $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth
+train: $(patsubst %,$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth,$(FEATS))
+$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth: \
+	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
+	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_sequencelabel.h5 \
+	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_sequencelabel.h5 \
+	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_cocofmt.json \
+	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_cocofmt.json \
+	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
+        $(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_%_mp$(NUM_CHUNKS).h5 \
+	$(FEAT_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_%_mp$(NUM_CHUNKS).h5 \
+	$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5 
+	mkdir -p $(MODEL_DIR)/$(EXP_NAME)
+	CUDA_VISIBLE_DEVICES=$(GID) python train.py \
+		--train_label_h5 $(word 1,$^) \
+		--val_label_h5 $(word 2,$^) \
+		--test_label_h5 $(word 3,$^) \
+		--train_cocofmt_file $(word 4,$^) \
+		--val_cocofmt_file $(word 5,$^) \
+		--test_cocofmt_file $(word 6,$^) \
+		--train_feat_h5 $(word 7,$^) \
+		--val_feat_h5 $(word 8,$^) \
+		--test_feat_h5 $(word 9,$^) \
+		--beam_size $(BEAM_SIZE) --max_patience $(MAX_PATIENCE) --eval_metric $(EVAL_METRIC) \
+		--language_eval $(VAL_LANG_EVAL) --max_epochs $(MAX_EPOCHS) --rnn_size $(RNN_SIZE) \
+		--train_seq_per_img $(TRAIN_SEQ_PER_IMG) --test_seq_per_img $(TEST_SEQ_PER_IMG) \
+		--batch_size $(BATCH_SIZE) --test_batch_size $(BATCH_SIZE) --learning_rate $(LEARNING_RATE) \
+		--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) \
+		--train_cached_tokens $(META_DIR)/$(TRAIN_DATASET)_train_cidercache.pkl \
+		--use_ss $(USE_SS) \
+		--use_scst_after $(SAVE_CHECKPOINT_FROM) --use_scst $(USE_SCST) \
+		--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) \
+		--model_file $@ --start_from $(START_FROM) --result_file $(basename $@)_test.json \
+		2>&1 | tee $(basename $@).log
+
+test: $(patsubst %,$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID)_test.json,$(FEATS))
+$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID)_test.json: \
+	$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth \
+	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_sequencelabel.h5 \
+	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
+	$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5
+	CUDA_VISIBLE_DEVICES=$(GID) python test.py \
+		--model_file $(word 1,$^) \
+		--test_label_h5 $(word 2,$^) \
+		--test_cocofmt_file $(word 3,$^) \
+		--test_feat_h5 $(word 4,$^) \
+		--beam_size $(BEAM_SIZE) \
+		--language_eval $(VAL_LANG_EVAL) \
+		--test_seq_per_img $(TEST_SEQ_PER_IMG) \
+		--test_batch_size $(BATCH_SIZE) \
+		--loglevel $(LOGLEVEL) \
+		--result_file $@
+
+train_multimodal: $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth
 $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth: \
 	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
 	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_sequencelabel.h5 \
@@ -151,14 +202,13 @@ $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth: \
 		--train_seq_per_img $(TRAIN_SEQ_PER_IMG) --test_seq_per_img $(TEST_SEQ_PER_IMG) \
 		--batch_size $(BATCH_SIZE) --test_batch_size $(BATCH_SIZE) --learning_rate $(LEARNING_RATE) \
 		--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) \
-		--test_only $(TEST_ONLY) \
 		--use_ss $(USE_SS) \
 		--train_cached_tokens $(META_DIR)/$(TRAIN_DATASET)_train_cidercache.pkl --use_scst_after $(SAVE_CHECKPOINT_FROM) --use_scst $(USE_SCST) \
 		--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) \
 		--model_file $@ --start_from $(START_FROM) --result_file $(basename $@)_test.json \
 		2>&1 | tee $(basename $@).log 
 
-test: $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID)_test.json
+test_multimodal: $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID)_test.json
 $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID)_test.json: \
 	$(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth \
 	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_sequencelabel.h5 \
@@ -175,6 +225,7 @@ $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID)_test.jso
 		--test_batch_size $(BATCH_SIZE) \
 		--loglevel $(LOGLEVEL) \
 		--result_file $@
+
 
 # If you want all intermediates to remain
 # .SECONDARY:

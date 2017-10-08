@@ -41,7 +41,7 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criteri
         model.load_state_dict(checkpoint['model'])
         infos = checkpoint['infos']
     
-    checked = False
+    checkpoint_checked = False
     scst_training = False
     
     while True:
@@ -58,8 +58,8 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criteri
             masks = masks.cuda()
         
         if opt.use_ss == 1 and infos['epoch'] >= opt.use_ss_after:
-            frac = (infos['epoch']-opt.use_ss_after) // opt.ss_increase_every
-            opt.ss_prob = min(opt.ss_increase_prob * frac, opt.ss_end_prob)
+            annealing_prob = opt.ss_k/(opt.ss_k + np.exp((infos['epoch'] - opt.use_ss_after)/opt.ss_k))
+            opt.ss_prob = min(1 - annealing_prob, opt.ss_max_prob)
             model.set_ss_prob(opt.ss_prob)
                 
         if opt.use_scst == 1 and infos['epoch'] >= opt.use_scst_after and not scst_training:
@@ -111,22 +111,22 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criteri
             log_info += [('Time', elapsed_time)]
             logger.info('%s', '\t'.join(['{}: {}'.format(k, v) for (k, v) in log_info]))
         
+        infos['iter'] += 1
+        
+        if infos['epoch'] < train_loader.get_current_epoch():
+            infos['epoch'] = train_loader.get_current_epoch()
+            checkpoint_checked = False
+            
         if (infos['epoch'] >= opt.save_checkpoint_from and 
             infos['epoch'] % opt.save_checkpoint_every == 0 and 
-            not checked):
+            not checkpoint_checked):
             # evaluate the validation performance
             results = validate(model, criterion, val_loader, opt)
             logger.info('Validation output: %s', json.dumps(results['scores'], indent=4, sort_keys=True))
             infos.update(results['scores'])
             
             check_model(model, opt, infos)
-            checked = True
-        
-        infos['iter'] += 1
-        
-        if infos['epoch'] < train_loader.get_current_epoch():
-            infos['epoch'] = train_loader.get_current_epoch()
-            checked = False
+            checkpoint_checked = True
         
         if (infos['epoch'] >= opt.max_epochs or \
             infos['epoch'] - infos['best_epoch'] > opt.max_patience):
@@ -310,7 +310,12 @@ if __name__ == '__main__':
     if opt.result_file is not None:
         logger.info('Start testing...')
         start = datetime.now()
-        test(model, xe_criterion, test_loader, opt, infos)
+        
+        logger.info('Loading model: %s', opt.model_file)
+        checkpoint = torch.load(opt.model_file)
+        model.load_state_dict(checkpoint['model'])
+        
+        test(model, xe_criterion, test_loader, opt)
         logger.info('Testing time: %s', datetime.now() - start)
 
     
