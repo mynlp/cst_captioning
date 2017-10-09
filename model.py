@@ -16,10 +16,12 @@ class RewardCriterion(nn.Module):
 
     def forward(self, seq, sample_logprobs, reward):
         
+        #import pdb; pdb.set_trace()
+        
         sample_logprobs = to_contiguous(sample_logprobs).view(-1)
         reward = to_contiguous(reward).view(-1)
         mask = (seq>0).float()
-        # shift to the right to count for the <eos> token
+        # add one to the right to count for the <eos> token
         mask = to_contiguous(torch.cat([mask.new(mask.size(0), 1).fill_(1), mask[:, :-1]], 1)).view(-1)
         output = - sample_logprobs * reward * Variable(mask)
         output = torch.sum(output) / torch.sum(mask)
@@ -289,13 +291,15 @@ class CaptionModel(nn.Module):
 
             if token_idx >= 1:
                 unfinished = unfinished * (it > 0)
-                # requires EOS token = 0
-                if unfinished.sum() == 0:
-                    break
-                    
+                
+                # 
                 it = it * unfinished.type_as(it)
                 seq.append(it) 
                 seqLogprobs.append(sampleLogprobs.view(-1))
+                
+                # requires EOS token = 0
+                if unfinished.sum() == 0:
+                    break
 
             if self.model_type == 'standard':
                 output, state = self.core(xt, state)

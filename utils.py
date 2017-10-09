@@ -50,20 +50,22 @@ def language_eval(gold_file, pred_file):
 def array_to_str(arr):
     out = ''
     for i in range(len(arr)):
-        out += str(arr[i]) + ' '
         if arr[i] == 0:
             break
+        if arr[i] == 1:    
+            continue
+        out += str(arr[i]) + ' '
     return out.strip()
 
-def get_self_critical_reward(greedy_res, gen_result, data_gts, CiderD_scorer):
-    batch_size = gen_result.size(0)
+def get_self_critical_reward(model_res, greedy_res, data_gts, CiderD_scorer):
+    batch_size = model_res.size(0)
 
     res = OrderedDict()
     
-    gen_result = gen_result.cpu().numpy()
+    model_res = model_res.cpu().numpy()
     greedy_res = greedy_res.cpu().numpy()
     for i in range(batch_size):
-        res[i] = [array_to_str(gen_result[i])]
+        res[i] = [array_to_str(model_res[i])]
     for i in range(batch_size):
         res[batch_size + i] = [array_to_str(greedy_res[i])]
 
@@ -74,12 +76,14 @@ def get_self_critical_reward(greedy_res, gen_result, data_gts, CiderD_scorer):
     #_, scores = Bleu(4).compute_score(gts, res)
     #scores = np.array(scores[3])
     res = [{'image_id':i, 'caption': res[i]} for i in range(2 * batch_size)]
-    gts = {i: gts[i % batch_size // 20] for i in range(2 * batch_size)}
+    gts = {i: gts[i % batch_size] for i in range(2 * batch_size)}
     
-    cider_score, scores = CiderD_scorer.compute_score(gts, res)
+    ciderd_score, scores = CiderD_scorer.compute_score(gts, res)
 
+    #import pdb; pdb.set_trace()
+    
     scores = scores[:batch_size] - scores[batch_size:]
 
-    rewards = np.repeat(scores[:, np.newaxis], gen_result.shape[1], 1)
-
-    return rewards, cider_score
+    rewards = np.repeat(scores[:, np.newaxis], model_res.shape[1], 1)
+    
+    return rewards, ciderd_score

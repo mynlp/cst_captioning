@@ -22,6 +22,7 @@ import opts
 
 import sys
 sys.path.append("cider")
+from pyciderevalcap.cider.cider import Cider
 from pyciderevalcap.ciderD.ciderD import CiderD
 
 logger = logging.getLogger(__name__)
@@ -35,11 +36,16 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criteri
              'best_epoch': opt.max_epochs
             }
     
-    if os.path.isfile(opt.start_from):
-        logger.info('Loading state from: %s', opt.start_from)
-        checkpoint = torch.load(opt.start_from)
+    if os.path.isfile(opt.start_from) or os.path.isdir(opt.start_from):
+        if os.path.isdir(opt.start_from):
+            start_from_file = os.path.join(opt.start_from, os.path.basename(opt.model_file))
+        else:
+            start_from_file = opt.start_from
+        logger.info('Loading state from: %s', start_from_file)
+        checkpoint = torch.load(start_from_file)
         model.load_state_dict(checkpoint['model'])
         infos = checkpoint['infos']
+        train_loader.set_current_epoch(infos['epoch'])
     
     checkpoint_checked = False
     scst_training = False
@@ -71,21 +77,26 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criteri
         model.set_seq_per_img(train_loader.get_seq_per_img())
         
         if scst_training:
-            gen_result, sample_logprobs = model.sample(feats, {'sample_max':0, 'expand_feat': opt.expand_feat})
+            # sampling from model distribution
+            model_res, sample_logprobs = model.sample(feats, {'sample_max':0, 'expand_feat': opt.expand_feat})
             # greedy decoding baseline
             greedy_res, _ = model.sample([Variable(f.data, volatile=True) for f in feats],
                                          {'sample_max': 1, 'expand_feat': opt.expand_feat})
-            reward, cider_score = utils.get_self_critical_reward(greedy_res, gen_result, data['gts'], 
-                                                                 CiderD_scorer, train_loader.get_seq_per_img())
-            loss = rl_criterion(gen_result, sample_logprobs, Variable(torch.from_numpy(reward).float().cuda(), requires_grad=False))
-            sents = utils.decode_sequence(opt.vocab, gen_result)
+            
+            reward, ciderd_score = utils.get_self_critical_reward(model_res, greedy_res, data['gts'], CiderD_scorer)
+            loss = rl_criterion(model_res, sample_logprobs, Variable(torch.from_numpy(reward).float().cuda(), requires_grad=False))
+            
+            """
+            model_sents = utils.decode_sequence(opt.vocab, model_res)
+            greedy_sents = utils.decode_sequence(opt.vocab, greedy_res)
         
-            for jj, sent in enumerate(sents):
+            for jj, sent in enumerate(zip(model_sents, greedy_sents)):
                 if opt.expand_feat == 1:
                     video_id = data['ids'][jj//train_loader.get_seq_per_img()]
                 else:
                     video_id = data['ids'][jj]
-                logger.debug('[%d] video %s: %s' %(jj, video_id, sent))
+                logger.debug('[%d] video %s\n\t Model: %s \n\t Greedy: %s' %(jj, video_id, sent[0], sent[1]))
+            """
             
         else:
             pred = model(feats, labels)
@@ -104,7 +115,7 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criteri
                         
             if scst_training and opt.use_scst == 1:
                 log_info += [('Reward', np.mean(reward[:,0])),
-                             ('Cider-D', cider_score)]
+                             ('Cider-D', ciderd_score)]
             if opt.use_ss == 1:
                 log_info += [('ss_prob', opt.ss_prob)]
             

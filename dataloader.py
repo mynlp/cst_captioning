@@ -182,6 +182,9 @@ class DataLoader():
     def get_current_epoch(self):
         return self.epoch
     
+    def set_current_epoch(self, epoch):
+        self.epoch = epoch
+    
     def shuffle_videos(self):
         np.random.shuffle(self.index)
     

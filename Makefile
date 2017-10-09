@@ -154,8 +154,8 @@ $(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth: \
 		--use_ss $(USE_SS) \
 		--use_scst_after $(SAVE_CHECKPOINT_FROM) --use_scst $(USE_SCST) \
 		--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) \
-		--model_file $@ --start_from $(START_FROM) --result_file $(basename $@)_test.json \
-		2>&1 | tee $(basename $@).log
+		--model_file $@ --start_from $(START_FROM) --result_file $(basename $@)_test.json 
+		#2>&1 | tee $(basename $@).log
 
 test: $(patsubst %,$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID)_test.json,$(FEATS))
 $(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID)_test.json: \
