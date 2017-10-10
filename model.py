@@ -16,7 +16,7 @@ class RewardCriterion(nn.Module):
 
     def forward(self, seq, sample_logprobs, reward):
         
-        #import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         
         sample_logprobs = to_contiguous(sample_logprobs).view(-1)
         reward = to_contiguous(reward).view(-1)

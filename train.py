@@ -27,6 +27,14 @@ from pyciderevalcap.ciderD.ciderD import CiderD
 
 logger = logging.getLogger(__name__)
 
+def language_eval(predictions, cocofmt_file, opt):
+    logger.info('>>> Language evaluating ...') 
+    tmp_checkpoint_json = os.path.join(opt.model_file + str(uuid.uuid4()) + '.json')
+    json.dump(predictions, open(tmp_checkpoint_json, 'w'))
+    lang_stats = utils.language_eval(cocofmt_file, tmp_checkpoint_json)
+    os.remove(tmp_checkpoint_json)
+    return lang_stats
+                
 def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criterion=None):
     
     infos = {'iter': 0, 
@@ -72,31 +80,35 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criteri
             logger.info('Start training using SCST objective...')
             scst_training = True
             CiderD_scorer = CiderD(df=opt.train_cached_tokens)
+            # CiderD_scorer = Cider(df=opt.train_cached_tokens)
+            # logger.info('loading gt refs: %s', train_loader.cocofmt_file)
+            # gt_refs = utils.load_gt_refs(train_loader.cocofmt_file)
             
         optimizer.zero_grad()
         model.set_seq_per_img(train_loader.get_seq_per_img())
         
         if scst_training:
             # sampling from model distribution
-            model_res, sample_logprobs = model.sample(feats, {'sample_max':0, 'expand_feat': opt.expand_feat})
+            model_res, sample_logprobs = model.sample(feats, {'sample_max':0, 
+                                                              'expand_feat': opt.expand_feat,
+                                                              'temperature': 1.0})
             # greedy decoding baseline
             greedy_res, _ = model.sample([Variable(f.data, volatile=True) for f in feats],
                                          {'sample_max': 1, 'expand_feat': opt.expand_feat})
             
-            reward, ciderd_score = utils.get_self_critical_reward(model_res, greedy_res, data['gts'], CiderD_scorer)
-            loss = rl_criterion(model_res, sample_logprobs, Variable(torch.from_numpy(reward).float().cuda(), requires_grad=False))
-            
-            """
             model_sents = utils.decode_sequence(opt.vocab, model_res)
             greedy_sents = utils.decode_sequence(opt.vocab, greedy_res)
-        
+
             for jj, sent in enumerate(zip(model_sents, greedy_sents)):
                 if opt.expand_feat == 1:
                     video_id = data['ids'][jj//train_loader.get_seq_per_img()]
                 else:
                     video_id = data['ids'][jj]
                 logger.debug('[%d] video %s\n\t Model: %s \n\t Greedy: %s' %(jj, video_id, sent[0], sent[1]))
-            """
+            
+            reward, m_cider_score, g_cider_score = utils.get_self_critical_reward(model_res, greedy_res, data['gts'], CiderD_scorer)
+            #reward, ciderd_score = utils.get_self_critical_reward(model_predictions, greedy_predictions, gt_refs, CiderD_scorer)
+            loss = rl_criterion(model_res, sample_logprobs, Variable(torch.from_numpy(reward).float().cuda(), requires_grad=False))
             
         else:
             pred = model(feats, labels)
@@ -115,7 +127,8 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criteri
                         
             if scst_training and opt.use_scst == 1:
                 log_info += [('Reward', np.mean(reward[:,0])),
-                             ('Cider-D', ciderd_score)]
+                             ('Cider-D (m)', m_cider_score),
+                            ('Cider-D (g)', g_cider_score)]
             if opt.use_ss == 1:
                 log_info += [('ss_prob', opt.ss_prob)]
             
@@ -127,6 +140,9 @@ def train(model, criterion, optimizer, train_loader, val_loader, opt, rl_criteri
         if infos['epoch'] < train_loader.get_current_epoch():
             infos['epoch'] = train_loader.get_current_epoch()
             checkpoint_checked = False
+            learning_rate = utils.adjust_learning_rate(opt, optimizer, infos['epoch'])
+            logger.info('===> Learning rate: %f: ', learning_rate)
+
             
         if (infos['epoch'] >= opt.save_checkpoint_from and 
             infos['epoch'] % opt.save_checkpoint_every == 0 and 

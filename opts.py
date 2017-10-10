@@ -23,6 +23,8 @@ def parse_opts():
     parser.add_argument('--train_seq_per_img', type=int, default=20, help='number of captions to sample for each image during training. Done for efficiency since CNN forward pass is expensive.')
     parser.add_argument('--test_seq_per_img', type=int, default=20, help='number of captions to sample for each image during training. Done for efficiency since CNN forward pass is expensive.')
     parser.add_argument('--learning_rate', type=float, default=1e-4, help='learning rate')
+    parser.add_argument('--lr_update', default=50, type=int,
+                        help='Number of epochs to update the learning rate.')
     
     # Model settings
     parser.add_argument('--rnn_type', type=str, default='lstm', choices=['lstm', 'gru', 'rnn'], help= 'type of RNN')
