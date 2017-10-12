@@ -27,13 +27,15 @@ VAL_SPLIT?=val
 TEST_SPLIT?=test
 
 LEARNING_RATE?=0.0001
+LR_UPDATE?=200
 BATCH_SIZE?=64
 TRAIN_SEQ_PER_IMG?=20
 TEST_SEQ_PER_IMG?=20
 RNN_SIZE?=512
 
+PRINT_INTERVAL?=20
 MAX_PATIENCE?=5 # FOR EARLY STOPPING
-SAVE_CHECKPOINT_FROM?=40
+SAVE_CHECKPOINT_FROM?=30
 FEAT_SET=c3d
 
 MAX_EPOCHS?=200
@@ -47,11 +49,13 @@ VAL_LANG_EVAL?=1
 TEST_LANG_EVAL?=1
 EVAL_METRIC?=CIDEr
 START_FROM?=No
-MODEL_TYPE?=standard
+MODEL_TYPE?=concat
 POOLING?=mp
 CAT_TYPE=glove
 LOGLEVEL?=INFO
 USE_SS?=0
+USE_SS_AFTER?=5
+SS_MAX_PROB?=0.25
 USE_ROBUST?=0
 USE_SCST?=0
 
@@ -123,6 +127,25 @@ prepro_ngrams: $(foreach s,$(SPLITS),$(patsubst %,$(META_DIR)/%_$(s)_cidercache.
 noop=
 space=$(noop) $(noop)
 
+TRAIN_OPT=--beam_size $(BEAM_SIZE) --max_patience $(MAX_PATIENCE) --eval_metric $(EVAL_METRIC) --print_log_interval $(PRINT_INTERVAL)\
+	--language_eval $(VAL_LANG_EVAL) --max_epochs $(MAX_EPOCHS) --rnn_size $(RNN_SIZE) \
+	--train_seq_per_img $(TRAIN_SEQ_PER_IMG) --test_seq_per_img $(TEST_SEQ_PER_IMG) \
+	--batch_size $(BATCH_SIZE) --test_batch_size $(BATCH_SIZE) --learning_rate $(LEARNING_RATE) --lr_update $(LR_UPDATE) \
+	--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) \
+	--train_cached_tokens $(META_DIR)/$(TRAIN_DATASET)_train_cidercache.pkl \
+	--use_ss $(USE_SS) --use_scst_after $(USE_SS_AFTER) --ss_max_prob $(SS_MAX_PROB) \
+	--use_scst $(USE_SCST) \
+	--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) \
+	--model_file $@ --start_from $(START_FROM) --result_file $(basename $@)_test.json \
+	2>&1 | tee $(basename $@).log
+
+TEST_OPT=--beam_size $(BEAM_SIZE) \
+	--language_eval $(VAL_LANG_EVAL) \
+	--test_seq_per_img $(TEST_SEQ_PER_IMG) \
+	--test_batch_size $(BATCH_SIZE) \
+	--loglevel $(LOGLEVEL) \
+	--result_file $@
+
 train: $(patsubst %,$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth,$(FEATS))
 $(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth: \
 	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
@@ -145,17 +168,7 @@ $(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth: \
 		--train_feat_h5 $(word 7,$^) \
 		--val_feat_h5 $(word 8,$^) \
 		--test_feat_h5 $(word 9,$^) \
-		--beam_size $(BEAM_SIZE) --max_patience $(MAX_PATIENCE) --eval_metric $(EVAL_METRIC) \
-		--language_eval $(VAL_LANG_EVAL) --max_epochs $(MAX_EPOCHS) --rnn_size $(RNN_SIZE) \
-		--train_seq_per_img $(TRAIN_SEQ_PER_IMG) --test_seq_per_img $(TEST_SEQ_PER_IMG) \
-		--batch_size $(BATCH_SIZE) --test_batch_size $(BATCH_SIZE) --learning_rate $(LEARNING_RATE) \
-		--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) \
-		--train_cached_tokens $(META_DIR)/$(TRAIN_DATASET)_train_cidercache.pkl \
-		--use_ss $(USE_SS) \
-		--use_scst_after $(SAVE_CHECKPOINT_FROM) --use_scst $(USE_SCST) \
-		--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) \
-		--model_file $@ --start_from $(START_FROM) --result_file $(basename $@)_test.json 
-		#2>&1 | tee $(basename $@).log
+		$(TRAIN_OPT)
 
 test: $(patsubst %,$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID)_test.json,$(FEATS))
 $(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID)_test.json: \
@@ -168,12 +181,7 @@ $(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID)_test.json: \
 		--test_label_h5 $(word 2,$^) \
 		--test_cocofmt_file $(word 3,$^) \
 		--test_feat_h5 $(word 4,$^) \
-		--beam_size $(BEAM_SIZE) \
-		--language_eval $(VAL_LANG_EVAL) \
-		--test_seq_per_img $(TEST_SEQ_PER_IMG) \
-		--test_batch_size $(BATCH_SIZE) \
-		--loglevel $(LOGLEVEL) \
-		--result_file $@
+		$(TEST_OPT)
 
 train_multimodal: $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth
 $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth: \
@@ -197,16 +205,7 @@ $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth: \
 		--train_feat_h5 $(patsubst %,$(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))\
 		--val_feat_h5 $(patsubst %,$(FEAT_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))\
 		--test_feat_h5 $(patsubst %,$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))\
-		--beam_size $(BEAM_SIZE) --max_patience $(MAX_PATIENCE) --eval_metric $(EVAL_METRIC) \
-		--language_eval $(VAL_LANG_EVAL) --max_epochs $(MAX_EPOCHS) --rnn_size $(RNN_SIZE) \
-		--train_seq_per_img $(TRAIN_SEQ_PER_IMG) --test_seq_per_img $(TEST_SEQ_PER_IMG) \
-		--batch_size $(BATCH_SIZE) --test_batch_size $(BATCH_SIZE) --learning_rate $(LEARNING_RATE) \
-		--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) \
-		--use_ss $(USE_SS) \
-		--train_cached_tokens $(META_DIR)/$(TRAIN_DATASET)_train_cidercache.pkl --use_scst_after $(SAVE_CHECKPOINT_FROM) --use_scst $(USE_SCST) \
-		--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) \
-		--model_file $@ --start_from $(START_FROM) --result_file $(basename $@)_test.json \
-		2>&1 | tee $(basename $@).log 
+		$(TRAIN_OPT)
 
 test_multimodal: $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID)_test.json
 $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID)_test.json: \
@@ -219,12 +218,7 @@ $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID)_test.jso
 		--test_label_h5 $(word 2,$^) \
 		--test_cocofmt_file $(word 3,$^) \
 		--test_feat_h5 $(patsubst %,$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))\
-		--beam_size $(BEAM_SIZE) \
-		--language_eval $(VAL_LANG_EVAL) \
-		--test_seq_per_img $(TEST_SEQ_PER_IMG) \
-		--test_batch_size $(BATCH_SIZE) \
-		--loglevel $(LOGLEVEL) \
-		--result_file $@
+		$(TEST_OPT)
 
 
 # If you want all intermediates to remain

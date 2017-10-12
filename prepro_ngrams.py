@@ -84,7 +84,7 @@ def build_dict(videos, wtoi):
         refs_words.append(ref_words)
         refs_idxs.append(ref_idxs)
         count_videos += 1
-        
+
     logger.info('total videos: %d', count_videos)
 
     ngram_words = compute_doc_freq(create_crefs(refs_words))
@@ -95,10 +95,10 @@ def build_dict(videos, wtoi):
 def main(vocab_json, captions_json, output_pkl, save_words=False):
 
     vocab = json.load(open(vocab_json))
-    
+
     # inverse table
-    wtoi = {w: i for i, w in enumerate(vocab)} 
-    
+    wtoi = {w: i for i, w in enumerate(vocab)}
+
     videos = json.load(open(captions_json))
 
     logger.info('Select tokens in the vocab only')
@@ -115,7 +115,7 @@ def main(vocab_json, captions_json, output_pkl, save_words=False):
     logger.info('Saving index to: %s', output_pkl)
     cPickle.dump({'document_frequency': ngram_idxs, 'ref_len': ref_len}, open(
         output_pkl, 'w'), protocol=cPickle.HIGHEST_PROTOCOL)
-    
+
     if save_words:
         output_file = output_pkl.replace('.pkl', '_words.pkl', 1)
         logger.info('Saving word to: %s', output_file)
@@ -136,16 +136,20 @@ if __name__ == "__main__":
         'output_pkl',
         default='_pkl',
         help='save idx frequencies')
-    
+
     parser.add_argument(
         '--output_words',
         action='store_true',
         help='optionally saving word frequencies')
-    
+
     args = parser.parse_args()
-    
+
     start = datetime.now()
-    
-    main(args.vocab_json, args.captions_json, args.output_pkl, save_words=args.output_words)
-    
+
+    main(
+        args.vocab_json,
+        args.captions_json,
+        args.output_pkl,
+        save_words=args.output_words)
+
     logger.info('Time: %s', datetime.now() - start)
