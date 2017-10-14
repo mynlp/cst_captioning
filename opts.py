@@ -174,7 +174,7 @@ def parse_opts():
     parser.add_argument(
         '--expand_feat',
         type=int,
-        default=0,
+        default=1,
         help='To expand features when sampling (to multiple captions)')
 
     parser.add_argument('--model_file', type=str, help='output model file')
@@ -282,30 +282,15 @@ def parse_opts():
         help='plot k/(k+exp(x/k)) from x=0 to 400, k=30')
 
     parser.add_argument(
+        '--use_mixer',
+        type=int,
+        default=1,
+        help='Use schedule sampling')
+    parser.add_argument(
         '--use_robust',
         type=int,
         default=0,
         help='Use schedule sampling')
-    parser.add_argument(
-        '--robust_start_epoch',
-        type=int,
-        default=1,
-        help='Use schedule sampling')
-    parser.add_argument(
-        '--robust_start',
-        type=int,
-        default=1,
-        help='Use schedule sampling')
-    parser.add_argument(
-        '--robust_end',
-        type=float,
-        default=0.9,
-        help='Use schedule sampling')
-    parser.add_argument(
-        '--robust_k',
-        type=int,
-        default=50,
-        help='plot k/(k+exp(x/k)) from x=0 to 400, k=30')
-
+    
     args = parser.parse_args()
     return args

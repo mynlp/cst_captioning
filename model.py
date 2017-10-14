@@ -180,7 +180,8 @@ class CaptionModel(nn.Module):
         self.model_type = opt.model_type
         self.bos_index = 1  # index of the <bos> token
         self.ss_prob = 0
-
+        self.mixer_from = 0
+        
         self.embed = nn.Embedding(self.vocab_size, self.input_encoding_size)
         self.logit = nn.Linear(self.rnn_size, self.vocab_size)
         self.dropout = nn.Dropout(self.drop_prob_lm)
@@ -206,6 +207,15 @@ class CaptionModel(nn.Module):
     def set_ss_prob(self, p):
         self.ss_prob = p
 
+    def set_mixer_from(self, t):
+        """Set values of mixer_from 
+        if mixer_from > 0 then start MIXER training
+        i.e:
+        from t = 0 -> t = mixer_from -1: use XE training
+        from t = mixer_from -> end: use RL training
+        """
+        self.mixer_from = t
+        
     def set_seq_per_img(self, x):
         self.seq_per_img = x
         self.feat_expander.set_n(x)
@@ -239,13 +249,15 @@ class CaptionModel(nn.Module):
                     self.rnn_size).zero_())
 
     def forward(self, feats, seq):
-
+        
         fc_feats = self.feat_pool(feats)
         fc_feats = self.feat_expander(fc_feats)
 
         batch_size = fc_feats.size(0)
         state = self.init_hidden(batch_size)
         outputs = []
+        sample_seq = []
+        sample_logprobs = []
 
         # -- if <image feature> is input at the first step, use index -1
         # -- the <eos> token is not used for training
@@ -273,9 +285,19 @@ class CaptionModel(nn.Module):
                             prob_prev, 1).view(-1).index_select(0, sample_ind)
                         it.index_copy_(0, sample_ind, sample_ind_tokens)
                         it = Variable(it, requires_grad=False)
+                elif self.training and self.mixer_from > 0 and token_idx > self.mixer_from:
+                    prob_prev = torch.exp(outputs[-1].data)
+                    it = torch.multinomial(prob_prev, 1).view(-1)
+                    it = Variable(it, requires_grad=False)
                 else:
                     it = seq[:, token_idx].clone()
 
+                if token_idx >= 1:
+                    # store the seq and its logprobs
+                    sample_seq.append(it.data)
+                    logprobs = outputs[-1].gather(1, it.unsqueeze(1))
+                    sample_logprobs.append(logprobs.view(-1))
+                
                 # break if all the sequences end, which requires EOS token = 0
                 if it.data.sum() == 0:
                     break
@@ -287,15 +309,17 @@ class CaptionModel(nn.Module):
                 if self.model_type == 'manet':
                     fc_feats = self.manet(fc_feats, state[0])
                 output, state = self.core(torch.cat([xt, fc_feats], 1), state)
-
+                
             if token_idx >= 0:
                 output = F.log_softmax(self.logit(self.dropout(output)))
                 outputs.append(output)
-
+                
         # only returns outputs of seq input
         # output size is: B x L x V (where L is truncated lengths
         # which are different for different batch)
-        return torch.cat([_.unsqueeze(1) for _ in outputs], 1)
+        return torch.cat([_.unsqueeze(1) for _ in outputs], 1), \
+                torch.cat([_.unsqueeze(1) for _ in sample_seq], 1), \
+                torch.cat([_.unsqueeze(1) for _ in sample_logprobs], 1) \
 
     def sample(self, feats, opt={}):
         sample_max = opt.get('sample_max', 1)
@@ -384,7 +408,7 @@ class CaptionModel(nn.Module):
         seq = torch.LongTensor(self.seq_length, batch_size).zero_()
         seqLogprobs = torch.FloatTensor(self.seq_length, batch_size)
         # lets process every image independently for now, for simplicity
-
+            
         self.done_beams = [[] for _ in range(batch_size)]
         for k in range(batch_size):
             state = self.init_hidden(beam_size)
@@ -499,12 +523,13 @@ class CaptionModel(nn.Module):
 
                 logprobs = F.log_softmax(self.logit(output))
 
+            
             #self.done_beams[k] = sorted(self.done_beams[k], key=lambda x: -x['p'])
             self.done_beams[k] = sorted(
                 self.done_beams[k], key=lambda x: x['ppl'])
+            
             # the first beam has highest cumulative score
             seq[:, k] = self.done_beams[k][0]['seq']
             seqLogprobs[:, k] = self.done_beams[k][0]['logps']
-
-        # return the samples and their log likelihoods
+            
         return seq.transpose(0, 1), seqLogprobs.transpose(0, 1)

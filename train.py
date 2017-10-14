@@ -69,6 +69,7 @@ def train(
         infos['start_epoch'] = infos['epoch']
         train_loader.set_current_epoch(infos['epoch'])
 
+    seq_per_img = train_loader.get_seq_per_img()     
     checkpoint_checked = False
     scst_training = False
 
@@ -91,7 +92,7 @@ def train(
                 (opt.ss_k + np.exp((infos['epoch'] - opt.use_ss_after) / opt.ss_k))
             opt.ss_prob = min(1 - annealing_prob, opt.ss_max_prob)
             model.set_ss_prob(opt.ss_prob)
-
+            
         if opt.use_scst == 1 and infos[
                 'epoch'] >= opt.use_scst_after and not scst_training:
             logger.info('Start training using SCST objective...')
@@ -100,42 +101,77 @@ def train(
             #logger.info('loading gt refs: %s', train_loader.cocofmt_file)
             #gt_refs = utils.load_gt_refs(train_loader.cocofmt_file)
 
+        opt.mixer_from = 0
+        if opt.use_mixer == 1 and scst_training:
+            annealing_mixer = opt.ss_k / \
+                (opt.ss_k + np.exp((infos['epoch'] - opt.use_scst_after) / opt.ss_k))
+            annealing_mixer = int(round(annealing_mixer * opt.seq_length))
+            opt.mixer_from = max(0, annealing_mixer)
+            model.set_mixer_from(opt.mixer_from)
+        
+        opt.num_remove = 0
+        if opt.use_robust == 1 and scst_training:
+            annealing_robust = opt.ss_k / \
+                (opt.ss_k + np.exp((infos['epoch'] - opt.use_scst_after) / opt.ss_k))
+            annealing_robust = int(round((1 - annealing_robust) * seq_per_img))
+            opt.num_remove = min(annealing_robust, seq_per_img-1)
+            
         optimizer.zero_grad()
-        model.set_seq_per_img(train_loader.get_seq_per_img())
+        model.set_seq_per_img(seq_per_img)
 
         if scst_training:
             # sampling from model distribution
-            model_res, logprobs = model.sample(
-                feats, {'sample_max': 0, 'expand_feat': opt.expand_feat, 'temperature': 0.1})
-
-            # greedy decoding baseline
-            baseline_res, _ = model.sample([Variable(f.data, volatile=True) for f in feats],
+            # model_res, logprobs = model.sample(
+            #    feats, {'sample_max': 0, 'expand_feat': opt.expand_feat, 'temperature': 1})
+            
+            # using mixer
+            pred, model_res, logprobs = model(feats, labels)
+            
+            if opt.use_robust == 0:
+                # greedy decoding baseline
+                baseline_res, _ = model.sample([Variable(f.data, volatile=True) for f in feats],
                                            {'sample_max': 1, 'expand_feat': opt.expand_feat})
 
-            model_sents = utils.decode_sequence(opt.vocab, model_res)
-            baseline_sents = utils.decode_sequence(opt.vocab, baseline_res)
-
-            for jj, sent in enumerate(zip(model_sents, baseline_sents)):
-                if opt.expand_feat == 1:
-                    video_id = data['ids'][
-                        jj // train_loader.get_seq_per_img()]
-                else:
-                    video_id = data['ids'][jj]
-                logger.debug(
-                    '[%d] video %s\n\t Model: %s \n\t Greedy: %s' %
-                    (jj, video_id, sent[0], sent[1]))
-
-            reward, m_score, g_score = utils.get_self_critical_reward(model_res, baseline_res, data['gts'], CiderD_scorer,
-                                                                      expand_feat=opt.expand_feat, seq_per_img=train_loader.get_seq_per_img())
+            if opt.loglevel.upper() == 'DEBUG':
+                model_sents = utils.decode_sequence(opt.vocab, model_res)
+                baseline_sents = utils.decode_sequence(opt.vocab, baseline_res)
+                for jj, sent in enumerate(zip(model_sents, baseline_sents)):
+                    if opt.expand_feat == 1:
+                        video_id = data['ids'][
+                            jj // train_loader.get_seq_per_img()]
+                    else:
+                        video_id = data['ids'][jj]
+                    logger.debug(
+                        '[%d] video %s\n\t Model: %s \n\t Greedy: %s' %
+                        (jj, video_id, sent[0], sent[1]))
+        
+            if opt.use_robust == 1:
+                reward, m_score, g_score = utils.get_robust_critical_reward(model_res, data['gts'], CiderD_scorer,
+                                                                          expand_feat=opt.expand_feat,
+                                                                          seq_per_img=train_loader.get_seq_per_img(),
+                                                                          num_remove=opt.num_remove
+                                                                         )
+            else:
+                reward, m_score, g_score = utils.get_self_critical_reward(model_res, baseline_res, data['gts'], CiderD_scorer,
+                                                                          expand_feat=opt.expand_feat,
+                                                                          seq_per_img=train_loader.get_seq_per_img())
+                
+            
+            #import pdb; pdb.set_trace()
+            
             loss = rl_criterion(
-                model_res,
-                logprobs,
+                model_res[:,opt.mixer_from:],
+                logprobs[:,opt.mixer_from:],
                 Variable(
-                    torch.from_numpy(reward).float().cuda(),
+                    torch.from_numpy(reward[:,opt.mixer_from:]).float().cuda(),
                     requires_grad=False))
-
+            
+            if opt.mixer_from > 0:
+                xe_loss = criterion(pred[:, :opt.mixer_from], labels[:, 1:opt.mixer_from+1], masks[:, 1:opt.mixer_from+1])
+                loss = loss + xe_loss
+                
         else:
-            pred = model(feats, labels)
+            pred = model(feats, labels)[0]
             loss = criterion(pred, labels[:, 1:], masks[:, 1:])
 
         loss.backward()
@@ -153,9 +189,16 @@ def train(
                 log_info += [('Reward', np.mean(reward[:, 0])),
                              ('Cider-D (m)', m_score),
                              ('Cider-D (g)', g_score)]
+            
             if opt.use_ss == 1:
                 log_info += [('ss_prob', opt.ss_prob)]
-
+                
+            if opt.use_mixer == 1:
+                log_info += [('mixer', opt.mixer_from)]    
+                
+            if opt.use_robust == 1:
+                log_info += [('robust', opt.num_remove)]
+                
             log_info += [('Time', elapsed_time)]
             logger.info('%s', '\t'.join(
                 ['{}: {}'.format(k, v) for (k, v) in log_info]))
@@ -234,7 +277,7 @@ def validate(model, criterion, loader, opt):
                 masks = masks.cuda()
 
         if loader.has_label:
-            pred = model(feats, labels)
+            pred = model(feats, labels)[0]
             loss = criterion(pred, labels[:, 1:], masks[:, 1:])
             loss_sum += loss.data[0]
 

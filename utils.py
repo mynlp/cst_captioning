@@ -182,3 +182,63 @@ def get_self_critical_reward(
     rewards = np.repeat(scores[:, np.newaxis], model_res.shape[1], 1)
 
     return rewards, m_score, g_score
+
+
+def get_robust_critical_reward(
+        model_res,
+        data_gts,
+        CiderD_scorer,
+        expand_feat=0,
+        seq_per_img=20,
+        num_remove=0):
+    
+    """
+    Args:
+        num_remove: number of sentences to be removed
+        
+    """
+    batch_size = model_res.size(0)
+
+    res = OrderedDict()
+    model_res = model_res.cpu().numpy()
+    for i in range(batch_size):
+        res[i] = [array_to_str(model_res[i])]
+
+    gts = OrderedDict()
+    for i in range(len(data_gts)):
+        gts[i] = [array_to_str(data_gts[i][j])
+                  for j in range(len(data_gts[i]))]
+
+    res = [{'image_id': i, 'caption': res[i]} for i in range(batch_size)]
+    if expand_feat == 1:
+        gts = {i: gts[(i % batch_size) // seq_per_img]
+               for i in range(batch_size)}
+    else:
+        gts = {i: gts[i % batch_size] for i in range(batch_size)}
+
+    score, scores = CiderD_scorer.compute_score(gts, res)
+    
+    if num_remove > 0:
+        # use removed sentences as baseline
+        scores = scores.reshape(-1, seq_per_img)
+        sorted_scores = np.sort(scores, axis=1)
+        
+        sorted_idx = np.argsort(scores, axis=1)
+        
+        m_score = np.mean(sorted_scores[:,num_remove:])
+        b_score = np.mean(sorted_scores[:,:num_remove])
+        
+        for ii in range(scores.shape[0]):
+            b = np.mean(sorted_scores[ii,:num_remove])
+            scores[ii] = scores[ii] - b
+            # to turn off backprobs
+            # however, negative scores will be also be helpful to learn
+            # scores[ii][scores[ii] < 0] = 0 
+        scores = scores.reshape(-1)
+    else:
+        m_score = score
+        b_score = 0
+        
+    rewards = np.repeat(scores[:, np.newaxis], model_res.shape[1], 1)
+    
+    return rewards, m_score, b_score
