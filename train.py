@@ -67,6 +67,8 @@ def train(
         model.load_state_dict(checkpoint['model'])
         infos = checkpoint['infos']
         infos['start_epoch'] = infos['epoch']
+    if opt.use_scst == 1 and opt.use_scst_after == 0:
+        opt.use_scst_after = infos['epoch']
         train_loader.set_current_epoch(infos['epoch'])
 
     seq_per_img = train_loader.get_seq_per_img()     
@@ -103,9 +105,12 @@ def train(
 
         opt.mixer_from = 0
         if opt.use_mixer == 1 and scst_training:
-            annealing_mixer = opt.ss_k / \
-                (opt.ss_k + np.exp((infos['epoch'] - opt.use_scst_after) / opt.ss_k))
-            annealing_mixer = int(round(annealing_mixer * opt.seq_length))
+            #annealing_mixer = opt.ss_k / \
+            #    (opt.ss_k + np.exp((infos['epoch'] - opt.use_scst_after) / opt.ss_k))
+            #annealing_mixer = int(round(annealing_mixer * opt.seq_length))
+            
+            #annealing_mixer = opt.seq_length - int(round((infos['epoch'] - opt.use_scst_after)/2)
+            annealing_mixer = opt.seq_length - int(round((infos['epoch'] - opt.use_scst_after)))
             opt.mixer_from = max(0, annealing_mixer)
             model.set_mixer_from(opt.mixer_from)
         
@@ -115,6 +120,7 @@ def train(
                 (opt.ss_k + np.exp((infos['epoch'] - opt.use_scst_after) / opt.ss_k))
             annealing_robust = int(round((1 - annealing_robust) * seq_per_img))
             opt.num_remove = min(annealing_robust, seq_per_img-1)
+            #opt.num_remove = 0
             
         optimizer.zero_grad()
         model.set_seq_per_img(seq_per_img)
@@ -132,7 +138,8 @@ def train(
                 baseline_res, _ = model.sample([Variable(f.data, volatile=True) for f in feats],
                                            {'sample_max': 1, 'expand_feat': opt.expand_feat})
 
-            if opt.loglevel.upper() == 'DEBUG':
+            """
+            if opt.loglevel.upper() == 'DEBUG' and opt.use_robust == 0:
                 model_sents = utils.decode_sequence(opt.vocab, model_res)
                 baseline_sents = utils.decode_sequence(opt.vocab, baseline_res)
                 for jj, sent in enumerate(zip(model_sents, baseline_sents)):
@@ -144,7 +151,8 @@ def train(
                     logger.debug(
                         '[%d] video %s\n\t Model: %s \n\t Greedy: %s' %
                         (jj, video_id, sent[0], sent[1]))
-        
+            """
+ 
             if opt.use_robust == 1:
                 reward, m_score, g_score = utils.get_robust_critical_reward(model_res, data['gts'], CiderD_scorer,
                                                                           expand_feat=opt.expand_feat,
@@ -158,17 +166,20 @@ def train(
                 
             
             #import pdb; pdb.set_trace()
-            
-            loss = rl_criterion(
-                model_res[:,opt.mixer_from:],
-                logprobs[:,opt.mixer_from:],
-                Variable(
-                    torch.from_numpy(reward[:,opt.mixer_from:]).float().cuda(),
-                    requires_grad=False))
+            rl_loss = 0
+            xe_loss = 0
+            if opt.mixer_from < model_res.size(1):
+                rl_loss = rl_criterion(
+                    model_res[:,opt.mixer_from:],
+                    logprobs[:,opt.mixer_from:],
+                    Variable(
+                        torch.from_numpy(reward[:,opt.mixer_from:]).float().cuda(),
+                        requires_grad=False))
             
             if opt.mixer_from > 0:
                 xe_loss = criterion(pred[:, :opt.mixer_from], labels[:, 1:opt.mixer_from+1], masks[:, 1:opt.mixer_from+1])
-                loss = loss + xe_loss
+            
+            loss = rl_loss + xe_loss
                 
         else:
             pred = model(feats, labels)[0]

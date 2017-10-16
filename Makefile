@@ -35,7 +35,7 @@ RNN_SIZE?=512
 
 PRINT_INTERVAL?=20
 MAX_PATIENCE?=5 # FOR EARLY STOPPING
-SAVE_CHECKPOINT_FROM?=30
+SAVE_CHECKPOINT_FROM?=10
 FEAT_SET=c3d
 
 MAX_EPOCHS?=200
@@ -59,6 +59,7 @@ SS_MAX_PROB?=0.25
 USE_ROBUST?=0
 USE_SCST?=0
 USE_MIXER?=0
+SS_K?=100
 
 
 FEAT1?=resnet
@@ -135,11 +136,11 @@ TRAIN_OPT=--beam_size $(BEAM_SIZE) --max_patience $(MAX_PATIENCE) --eval_metric 
 	--batch_size $(BATCH_SIZE) --test_batch_size $(BATCH_SIZE) --learning_rate $(LEARNING_RATE) --lr_update $(LR_UPDATE) \
 	--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) \
 	--train_cached_tokens $(META_DIR)/$(TRAIN_DATASET)_train_cidercache.pkl \
-	--use_ss $(USE_SS) --use_scst_after $(USE_SS_AFTER) --ss_max_prob $(SS_MAX_PROB) \
+	--use_ss $(USE_SS) --ss_k $(SS_K) --use_scst_after $(USE_SS_AFTER) --ss_max_prob $(SS_MAX_PROB) \
 	--use_scst $(USE_SCST) --use_robust $(USE_ROBUST) --use_mixer $(USE_MIXER) \
 	--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) \
-	--model_file $@ --start_from $(START_FROM) --result_file $(basename $@)_test.json
-	#2>&1 | tee $(basename $@).log
+	--model_file $@ --start_from $(START_FROM) --result_file $(basename $@)_test.json \
+	2>&1 | tee $(basename $@).log
 
 TEST_OPT=--beam_size $(BEAM_SIZE) \
 	--language_eval $(VAL_LANG_EVAL) \

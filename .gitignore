@@ -1,6 +1,7 @@
 
 # Files
 *.pyc
+*.sh
 
 # Directories
 input
