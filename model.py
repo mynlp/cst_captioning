@@ -285,7 +285,7 @@ class CaptionModel(nn.Module):
                             prob_prev, 1).view(-1).index_select(0, sample_ind)
                         it.index_copy_(0, sample_ind, sample_ind_tokens)
                         it = Variable(it, requires_grad=False)
-                elif self.training and self.mixer_from > 0 and token_idx > self.mixer_from:
+                elif self.training and self.mixer_from > 0 and token_idx >= self.mixer_from:
                     prob_prev = torch.exp(outputs[-1].data)
                     it = torch.multinomial(prob_prev, 1).view(-1)
                     it = Variable(it, requires_grad=False)

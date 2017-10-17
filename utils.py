@@ -190,11 +190,13 @@ def get_robust_critical_reward(
         CiderD_scorer,
         expand_feat=0,
         seq_per_img=20,
-        num_remove=0):
+        num_robust=0,
+        use_robust_baseline=1):
     
     """
     Args:
-        num_remove: number of sentences to be removed
+        num_robust: number of sentences to be removed
+        use_baseline: use removed captions as baseline or not
         
     """
     batch_size = model_res.size(0)
@@ -218,22 +220,29 @@ def get_robust_critical_reward(
 
     score, scores = CiderD_scorer.compute_score(gts, res)
     
-    if num_remove > 0:
+    if num_robust > 0:
         # use removed sentences as baseline
         scores = scores.reshape(-1, seq_per_img)
         sorted_scores = np.sort(scores, axis=1)
         
         sorted_idx = np.argsort(scores, axis=1)
         
-        m_score = np.mean(sorted_scores[:,num_remove:])
-        b_score = np.mean(sorted_scores[:,:num_remove])
+        m_score = np.mean(sorted_scores[:,num_robust:])
+        b_score = np.mean(sorted_scores[:,:num_robust])
         
         for ii in range(scores.shape[0]):
-            b = np.mean(sorted_scores[ii,:num_remove])
-            scores[ii] = scores[ii] - b
-            # to turn off backprobs
-            # however, negative scores will be also be helpful to learn
-            # scores[ii][scores[ii] < 0] = 0 
+            if use_robust_baseline == 1:
+                # note: may need to reculate b, use the max value, 
+                # rathan the average, as in the else statement
+                b = np.mean(sorted_scores[ii,:num_robust])
+                scores[ii] = scores[ii] - b
+            else:
+                # to turn off backprobs
+                # however, negative scores may be also be helpful to learn
+                b = sorted_scores[ii, num_robust]
+                #scores[ii] = max(scores[ii] - b, 0)
+                scores[ii][scores[ii]<=b] = 0
+                
         scores = scores.reshape(-1)
     else:
         m_score = score

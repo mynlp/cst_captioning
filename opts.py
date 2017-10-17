@@ -291,6 +291,16 @@ def parse_opts():
         type=int,
         default=0,
         help='Use schedule sampling')
+    parser.add_argument(
+        '--num_robust',
+        type=int,
+        default=0,
+        help='if not using annealing (set ss_k = 0), then using this fixed number to be the number of caption to be removed')
+    parser.add_argument(
+        '--use_robust_baseline',
+        type=int,
+        default=1,
+        help='Use schedule sampling')
     
     args = parser.parse_args()
     return args

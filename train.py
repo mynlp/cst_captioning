@@ -109,18 +109,17 @@ def train(
             #    (opt.ss_k + np.exp((infos['epoch'] - opt.use_scst_after) / opt.ss_k))
             #annealing_mixer = int(round(annealing_mixer * opt.seq_length))
             
-            #annealing_mixer = opt.seq_length - int(round((infos['epoch'] - opt.use_scst_after)/2)
-            annealing_mixer = opt.seq_length - int(round((infos['epoch'] - opt.use_scst_after)))
-            opt.mixer_from = max(0, annealing_mixer)
+            annealing_mixer = opt.seq_length - int(round((infos['epoch'] - opt.use_scst_after)/2))
+            opt.mixer_from = max(1, annealing_mixer)
             model.set_mixer_from(opt.mixer_from)
         
-        opt.num_remove = 0
-        if opt.use_robust == 1 and scst_training:
+        if opt.use_robust == 1 and scst_training and opt.ss_k > 0:
+            # if opt.use_robust == 1 and opt.ss_k == 0,
+            # then do not using annealing, but the fixed num_robust provided
             annealing_robust = opt.ss_k / \
                 (opt.ss_k + np.exp((infos['epoch'] - opt.use_scst_after) / opt.ss_k))
             annealing_robust = int(round((1 - annealing_robust) * seq_per_img))
-            opt.num_remove = min(annealing_robust, seq_per_img-1)
-            #opt.num_remove = 0
+            opt.num_robust = min(annealing_robust, seq_per_img-1)
             
         optimizer.zero_grad()
         model.set_seq_per_img(seq_per_img)
@@ -157,7 +156,8 @@ def train(
                 reward, m_score, g_score = utils.get_robust_critical_reward(model_res, data['gts'], CiderD_scorer,
                                                                           expand_feat=opt.expand_feat,
                                                                           seq_per_img=train_loader.get_seq_per_img(),
-                                                                          num_remove=opt.num_remove
+                                                                          num_robust=opt.num_robust,
+                                                                          use_robust_baseline=opt.use_robust_baseline
                                                                          )
             else:
                 reward, m_score, g_score = utils.get_self_critical_reward(model_res, baseline_res, data['gts'], CiderD_scorer,
@@ -168,7 +168,8 @@ def train(
             #import pdb; pdb.set_trace()
             rl_loss = 0
             xe_loss = 0
-            if opt.mixer_from < model_res.size(1):
+            # -1 because we don't count <eos> here
+            if opt.mixer_from < model_res.size(1)-1:
                 rl_loss = rl_criterion(
                     model_res[:,opt.mixer_from:],
                     logprobs[:,opt.mixer_from:],
@@ -208,7 +209,7 @@ def train(
                 log_info += [('mixer', opt.mixer_from)]    
                 
             if opt.use_robust == 1:
-                log_info += [('robust', opt.num_remove)]
+                log_info += [('robust', opt.num_robust)]
                 
             log_info += [('Time', elapsed_time)]
             logger.info('%s', '\t'.join(
