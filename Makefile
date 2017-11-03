@@ -140,10 +140,10 @@ TRAIN_OPT=--beam_size $(BEAM_SIZE) --max_patience $(MAX_PATIENCE) --eval_metric 
 	--train_cached_tokens $(META_DIR)/$(TRAIN_DATASET)_train_cidercache.pkl \
 	--use_ss $(USE_SS) --ss_k $(SS_K) --use_scst_after $(USE_SS_AFTER) --ss_max_prob $(SS_MAX_PROB) \
 	--use_scst $(USE_SCST) --use_mixer $(USE_MIXER) \
-	--use_robust $(USE_ROBUST) --num_robust $(USE_ROBUST) --use_robust_baseline $(R_BASELINE) \
+	--use_robust $(USE_ROBUST) --num_robust $(NUM_ROBUST) --use_robust_baseline $(R_BASELINE) \
 	--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) \
-	--model_file $@ --start_from $(START_FROM) --result_file $(basename $@)_test.json \
-	2>&1 | tee $(basename $@).log
+	--model_file $@ --start_from $(START_FROM) --result_file $(basename $@)_test.json 
+	#2>&1 | tee $(basename $@).log
 
 TEST_OPT=--beam_size $(BEAM_SIZE) \
 	--language_eval $(VAL_LANG_EVAL) \
@@ -226,6 +226,18 @@ $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID)_test.jso
 		--test_feat_h5 $(patsubst %,$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))\
 		$(TEST_OPT)
 
+
+compute_score:
+	python compute_cider.py \
+		$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
+		$(META_DIR)/$(TRAIN_DATASET)_test_cidercache.pkl \
+		$(META_DIR)/$(TRAIN_DATASET)_test_ciderscores.pkl 
+
+compute_dataslice:
+	python compute_dataslice.py \
+		$(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID)_test.json \
+		$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
+		$(META_DIR)/$(TRAIN_DATASET)_test_ciderscores.pkl rl.txt
 
 # If you want all intermediates to remain
 # .SECONDARY:

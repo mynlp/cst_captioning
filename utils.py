@@ -114,14 +114,23 @@ def language_eval(gold_file, pred_file):
     return out
 
 
-def array_to_str(arr):
+def array_to_str(arr, use_eos=True):
     out = ''
     for i in range(len(arr)):
-        if arr[i] == 0:
+        if not use_eos and arr[i] == 0:
             break
+        
+        # skip the <bos> token    
         if arr[i] == 1:
             continue
+            
         out += str(arr[i]) + ' '
+        
+        # return if encouters the <eos> token
+        # this will also guarantees that the first <eos> will be rewarded
+        if arr[i] == 0:
+            break
+            
     return out.strip()
 
 
@@ -161,7 +170,7 @@ def get_self_critical_reward(
     for i in range(len(data_gts)):
         gts[i] = [array_to_str(data_gts[i][j])
                   for j in range(len(data_gts[i]))]
-
+    
     #_, scores = Bleu(4).compute_score(gts, res)
     #scores = np.array(scores[3])
 
