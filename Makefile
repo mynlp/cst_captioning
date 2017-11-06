@@ -11,7 +11,7 @@ MSRVTT2017_DIR=$(IN_DIR)/msrvtt2017
 YT2T_DIR=$(IN_DIR)/yt2t
 
 SPLITS=train val test
-DATASETS=yt2t msrvtt msrvtt2017 tvvtt
+DATASETS=yt2t msrvtt# msrvtt2017 tvvtt
 
 WORD_COUNT_THRESHOLD?=3  # in output/metadata this threshold was 0; was 3 in output/metadata2017
 MAX_SEQ_LEN?=30          # in output/metadata seqlen was 20; was 30 in output/metadata2017
@@ -127,6 +127,10 @@ prepro_ngrams: $(foreach s,$(SPLITS),$(patsubst %,$(META_DIR)/%_$(s)_cidercache.
 %_cidercache.pkl: $$(firstword $$(subst _, ,$$@))_train_vocab.json %_proprocessedtokens.json
 	python prepro_ngrams.py $^ $@ --output_words
 
+# newer version: use vocab of all words, rather than with word freq > 3
+prepro_cidercache: $(foreach s,$(SPLITS),$(patsubst %,$(META_DIR)/%_$(s)_cidercacheall.pkl,$(DATASETS)))
+%_cidercacheall.pkl: %_proprocessedtokens.json
+	python prepro_ngrams.py $^ $@ --output_words
 #####################################################################################################################
 
 noop=
@@ -142,8 +146,8 @@ TRAIN_OPT=--beam_size $(BEAM_SIZE) --max_patience $(MAX_PATIENCE) --eval_metric 
 	--use_scst $(USE_SCST) --use_mixer $(USE_MIXER) \
 	--use_robust $(USE_ROBUST) --num_robust $(NUM_ROBUST) --use_robust_baseline $(R_BASELINE) \
 	--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) \
-	--model_file $@ --start_from $(START_FROM) --result_file $(basename $@)_test.json 
-	#2>&1 | tee $(basename $@).log
+	--model_file $@ --start_from $(START_FROM) --result_file $(basename $@)_test.json \
+	2>&1 | tee $(basename $@).log
 
 TEST_OPT=--beam_size $(BEAM_SIZE) \
 	--language_eval $(VAL_LANG_EVAL) \
@@ -227,11 +231,9 @@ $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID)_test.jso
 		$(TEST_OPT)
 
 
-compute_score:
-	python compute_cider.py \
-		$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
-		$(META_DIR)/$(TRAIN_DATASET)_test_cidercache.pkl \
-		$(META_DIR)/$(TRAIN_DATASET)_test_ciderscores.pkl 
+compute_ciderscores: $(patsubst %,$(META_DIR)/$(TRAIN_DATASET)_%_ciderscores.pkl,$(SPLITS))
+%_ciderscores.pkl: %_cocofmt.json
+	python compute_cider.py $^ $@
 
 compute_dataslice:
 	python compute_dataslice.py \
@@ -239,6 +241,12 @@ compute_dataslice:
 		$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
 		$(META_DIR)/$(TRAIN_DATASET)_test_ciderscores.pkl rl.txt
 
+compute_ciderd:
+	python compute_ciderd.py \
+		$(MODEL_DIR)/xe_robust_r0/resnetc3dmfcccategory_msrvtt_concat_CIDEr_64_0.0001_test.json \
+		$(META_DIR)/$(TRAIN_DATASET)_test_cidercacheall_words.pkl \
+		$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json 
+	
 # If you want all intermediates to remain
 # .SECONDARY:
 

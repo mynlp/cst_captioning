@@ -10,7 +10,7 @@ from collections import defaultdict
 
 import logging
 from datetime import datetime
-from build_vocab import __PAD_TOKEN, __UNK_TOKEN, __BOS_TOKEN, __EOS_TOKEN
+from build_vocab import __PAD_TOKEN, __UNK_TOKEN, __BOS_TOKEN, __EOS_TOKEN, build_vocab
 
 logger = logging.getLogger(__name__)
 
@@ -94,20 +94,26 @@ def build_dict(videos, wtoi):
 
 def main(vocab_json, captions_json, output_pkl, save_words=False):
 
-    vocab = json.load(open(vocab_json))
+    logger.info('Loading: %s', captions_json)
+    videos = json.load(open(captions_json))
+
+    if vocab_json is not None:
+        logger.info('Loading vocab: %s', vocab_json)
+        vocab = json.load(open(vocab_json))
+    else:
+        logger.info('Selecting all word to form the vocab')
+        vocab = build_vocab(videos, 0)
 
     # inverse table
     wtoi = {w: i for i, w in enumerate(vocab)}
-
-    videos = json.load(open(captions_json))
 
     logger.info('Select tokens in the vocab only')
     for v in videos:
         v['final_captions'] = []
         for txt in v['processed_tokens']:
-            caption = [__BOS_TOKEN]
-            caption += [w if w in wtoi else __UNK_TOKEN for w in txt]
-            caption += [__EOS_TOKEN]
+            #caption = [__BOS_TOKEN]
+            caption = [w if w in wtoi else __UNK_TOKEN for w in txt]
+            #caption += [__EOS_TOKEN]
             v['final_captions'].append(caption)
 
     ngram_words, ngram_idxs, ref_len = build_dict(videos, wtoi)
@@ -128,8 +134,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     # input json
-    parser.add_argument('vocab_json', default='_vocab.json',
-                        help='vocab json file')
     parser.add_argument('captions_json', default='_proprocessedtokens',
                         help='_proprocessedtokens json file')
     parser.add_argument(
@@ -142,6 +146,9 @@ if __name__ == "__main__":
         action='store_true',
         help='optionally saving word frequencies')
 
+    parser.add_argument('--vocab_json', default=None,
+                        help='vocab json file')
+    
     args = parser.parse_args()
 
     start = datetime.now()
