@@ -153,7 +153,12 @@ def train(
             """
  
             if opt.use_robust == 1:
+                ciderscores = None
+                if opt.use_mixer == 0 and data['ciderscores'] is not None:
+                    ciderscores = data['ciderscores']
+                    
                 reward, m_score, g_score = utils.get_robust_critical_reward(model_res, data['gts'], CiderD_scorer,
+                                                                            scores=ciderscores,
                                                                           expand_feat=opt.expand_feat,
                                                                           seq_per_img=train_loader.get_seq_per_img(),
                                                                           num_robust=opt.num_robust,
@@ -388,6 +393,7 @@ if __name__ == '__main__':
                  'batch_size': opt.batch_size,
                  'feat_h5': opt.train_feat_h5,
                  'cocofmt_file': opt.train_cocofmt_file,
+                 'ciderscores_pkl': opt.train_ciderscores_pkl,
                  'seq_per_img': opt.train_seq_per_img,
                  'num_chunks': opt.num_chunks,
                  'mode': 'train'

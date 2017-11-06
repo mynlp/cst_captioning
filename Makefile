@@ -164,6 +164,7 @@ $(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth: \
 	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_cocofmt.json \
 	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_cocofmt.json \
 	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
+	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_ciderscores.pkl \
         $(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_%_mp$(NUM_CHUNKS).h5 \
 	$(FEAT_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_%_mp$(NUM_CHUNKS).h5 \
 	$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5 
@@ -175,9 +176,10 @@ $(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth: \
 		--train_cocofmt_file $(word 4,$^) \
 		--val_cocofmt_file $(word 5,$^) \
 		--test_cocofmt_file $(word 6,$^) \
-		--train_feat_h5 $(word 7,$^) \
-		--val_feat_h5 $(word 8,$^) \
-		--test_feat_h5 $(word 9,$^) \
+		--train_ciderscores_pkl $(word 7,$^) \
+		--train_feat_h5 $(word 8,$^) \
+		--val_feat_h5 $(word 9,$^) \
+		--test_feat_h5 $(word 10,$^)
 		$(TRAIN_OPT)
 
 test: $(patsubst %,$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID)_test.json,$(FEATS))
@@ -201,6 +203,7 @@ $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth: \
 	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_cocofmt.json \
 	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_cocofmt.json \
 	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
+	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_ciderscores.pkl \
         $(patsubst %,$(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS)) \
 	$(patsubst %,$(FEAT_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS)) \
 	$(patsubst %,$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))
@@ -212,6 +215,7 @@ $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth: \
 		--train_cocofmt_file $(word 4,$^) \
 		--val_cocofmt_file $(word 5,$^) \
 		--test_cocofmt_file $(word 6,$^) \
+		--train_ciderscores_pkl $(word 7,$^) \
 		--train_feat_h5 $(patsubst %,$(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))\
 		--val_feat_h5 $(patsubst %,$(FEAT_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))\
 		--test_feat_h5 $(patsubst %,$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))\
@@ -248,7 +252,7 @@ compute_ciderd:
 		$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json 
 	
 # If you want all intermediates to remain
-# .SECONDARY:
+.SECONDARY:
 
 # You can use the wildcard with .PRECIOUS.
 .PRECIOUS: %.pth

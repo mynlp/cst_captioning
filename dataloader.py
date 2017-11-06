@@ -7,6 +7,7 @@ import os
 import numpy as np
 import random
 import time
+import cPickle
 
 import logging
 from datetime import datetime
@@ -28,6 +29,7 @@ class DataLoader():
         self.num_chunks = opt.get('num_chunks', 1)
         self.mode = opt.get('mode', 'train')
         self.cocofmt_file = opt.get('cocofmt_file', None)
+        self.ciderscores_pkl = opt.get('ciderscores_pkl', None)
 
         # open the hdf5 info file
         logger.info('DataLoader loading h5 file: %s', opt['label_h5'])
@@ -65,6 +67,10 @@ class DataLoader():
         else:
             self.has_label = False
 
+        if self.ciderscores_pkl is not None:
+            logger.info('Loading: %s', self.ciderscores_pkl)
+            self.ciderscores = cPickle.load(open(self.ciderscores_pkl))['cider']
+            
         if self.mode == 'train':
             self.shuffle_videos()
 
@@ -91,7 +97,8 @@ class DataLoader():
 
         videoids_batch = []
         gts = []
-
+        ciderscores = np.zeros((self.batch_size, self.seq_per_img)) if self.ciderscores_pkl is not None else None
+        
         for ii in range(self.batch_size):
             idx = self.index[self.iterator]
             video_id = int(self.videos[idx])
@@ -132,6 +139,11 @@ class DataLoader():
                     self.label_h5['labels'][
                         self.label_start_ix[idx]: self.label_end_ix[idx]])
 
+                # pre-computed cider scores, 
+                # assuming now that videos order are same (which is the sorted videos order)
+                if self.ciderscores_pkl is not None:
+                    ciderscores[ii] = self.ciderscores[idx]
+                    
             self.iterator += 1
             if self.iterator >= self.num_videos:
                 logger.info('===> Finished loading epoch %d', self.epoch)
@@ -154,6 +166,7 @@ class DataLoader():
             data['labels'] = label_batch
             data['masks'] = mask_batch
             data['gts'] = gts
+            data['ciderscores'] = ciderscores
 
         return data
 

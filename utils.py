@@ -197,6 +197,7 @@ def get_robust_critical_reward(
         model_res,
         data_gts,
         CiderD_scorer,
+        scores=None,
         expand_feat=0,
         seq_per_img=20,
         num_robust=0,
@@ -208,30 +209,33 @@ def get_robust_critical_reward(
         use_baseline: use removed captions as baseline or not
         
     """
-    batch_size = model_res.size(0)
+    if scores is None:
+        batch_size = model_res.size(0)
 
-    res = OrderedDict()
-    model_res = model_res.cpu().numpy()
-    for i in range(batch_size):
-        res[i] = [array_to_str(model_res[i])]
+        res = OrderedDict()
+        model_res = model_res.cpu().numpy()
+        for i in range(batch_size):
+            res[i] = [array_to_str(model_res[i])]
 
-    gts = OrderedDict()
-    for i in range(len(data_gts)):
-        gts[i] = [array_to_str(data_gts[i][j])
-                  for j in range(len(data_gts[i]))]
+        gts = OrderedDict()
+        for i in range(len(data_gts)):
+            gts[i] = [array_to_str(data_gts[i][j])
+                      for j in range(len(data_gts[i]))]
 
-    res = [{'image_id': i, 'caption': res[i]} for i in range(batch_size)]
-    if expand_feat == 1:
-        gts = {i: gts[(i % batch_size) // seq_per_img]
-               for i in range(batch_size)}
-    else:
-        gts = {i: gts[i % batch_size] for i in range(batch_size)}
+        res = [{'image_id': i, 'caption': res[i]} for i in range(batch_size)]
+        if expand_feat == 1:
+            gts = {i: gts[(i % batch_size) // seq_per_img]
+                   for i in range(batch_size)}
+        else:
+            gts = {i: gts[i % batch_size] for i in range(batch_size)}
 
-    score, scores = CiderD_scorer.compute_score(gts, res)
-    
+        _, scores = CiderD_scorer.compute_score(gts, res)
+        
+        scores = scores.reshape(-1, seq_per_img)
+        
     if num_robust > 0:
         # use removed sentences as baseline
-        scores = scores.reshape(-1, seq_per_img)
+        
         sorted_scores = np.sort(scores, axis=1)
         
         sorted_idx = np.argsort(scores, axis=1)
@@ -254,9 +258,10 @@ def get_robust_critical_reward(
                 
         scores = scores.reshape(-1)
     else:
-        m_score = score
+        m_score = np.mean(scores)
         b_score = 0
-        
+    
+    scores = scores.reshape(-1)
     rewards = np.repeat(scores[:, np.newaxis], model_res.shape[1], 1)
     
     return rewards, m_score, b_score
