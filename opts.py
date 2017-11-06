@@ -273,7 +273,7 @@ def parse_opts():
     parser.add_argument(
         '--use_ss_after',
         type=int,
-        default=5,
+        default=0,
         help='Use schedule sampling')
     parser.add_argument(
         '--ss_max_prob',
@@ -292,10 +292,20 @@ def parse_opts():
         default=1,
         help='Use schedule sampling')
     parser.add_argument(
+        '--mixer_increase_every',
+        type=int,
+        default=2,
+        help='Epoch interval to increase mixing value')
+    parser.add_argument(
         '--use_robust',
         type=int,
         default=0,
         help='Use schedule sampling')
+    parser.add_argument(
+        '--robust_increase_every',
+        type=int,
+        default=5,
+        help='Epoch interval to increase robustness')
     parser.add_argument(
         '--num_robust',
         type=int,

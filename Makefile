@@ -251,9 +251,9 @@ compute_ciderd:
 		$(META_DIR)/$(TRAIN_DATASET)_test_cidercacheall_words.pkl \
 		$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json 
 	
-# If you want all intermediates to remain
-.SECONDARY:
 
 # You can use the wildcard with .PRECIOUS.
 .PRECIOUS: %.pth
 
+# If you want all intermediates to remain
+.SECONDARY:

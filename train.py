@@ -55,6 +55,11 @@ def train(
              'best_epoch': opt.max_epochs
              }
 
+    checkpoint_checked = False
+    scst_training = False
+    seq_per_img = train_loader.get_seq_per_img()     
+    infos_history = {}
+    
     if os.path.isfile(opt.start_from) or os.path.isdir(opt.start_from):
         if os.path.isdir(opt.start_from):
             start_from_file = os.path.join(
@@ -67,13 +72,11 @@ def train(
         model.load_state_dict(checkpoint['model'])
         infos = checkpoint['infos']
         infos['start_epoch'] = infos['epoch']
+        checkpoint_checked = True # this epoch is already checked
+        
     if opt.use_scst == 1 and opt.use_scst_after == 0:
         opt.use_scst_after = infos['epoch']
         train_loader.set_current_epoch(infos['epoch'])
-
-    seq_per_img = train_loader.get_seq_per_img()     
-    checkpoint_checked = False
-    scst_training = False
 
     while True:
         t_start = time.time()
@@ -109,16 +112,18 @@ def train(
             #    (opt.ss_k + np.exp((infos['epoch'] - opt.use_scst_after) / opt.ss_k))
             #annealing_mixer = int(round(annealing_mixer * opt.seq_length))
             
-            annealing_mixer = opt.seq_length - int(round((infos['epoch'] - opt.use_scst_after)/2))
+            annealing_mixer = opt.seq_length - int(np.ceil((infos['epoch']-opt.use_scst_after)/float(opt.mixer_increase_every)))
             opt.mixer_from = max(1, annealing_mixer)
             model.set_mixer_from(opt.mixer_from)
         
         if opt.use_robust == 1 and scst_training and opt.ss_k > 0:
             # if opt.use_robust == 1 and opt.ss_k == 0,
             # then do not using annealing, but the fixed num_robust provided
-            annealing_robust = opt.ss_k / \
-                (opt.ss_k + np.exp((infos['epoch'] - opt.use_scst_after) / opt.ss_k))
-            annealing_robust = int(round((1 - annealing_robust) * seq_per_img))
+            #annealing_robust = opt.ss_k / \
+            #    (opt.ss_k + np.exp((infos['epoch'] - opt.use_scst_after) / opt.ss_k))
+            #annealing_robust = int(round((1 - annealing_robust) * seq_per_img))
+            
+            annealing_robust = int(np.ceil((infos['epoch']-opt.use_scst_after)/float(opt.robust_increase_every)))
             opt.num_robust = min(annealing_robust, seq_per_img-1)
             
         optimizer.zero_grad()
@@ -194,13 +199,16 @@ def train(
         loss.backward()
         clip_grad_norm(model.parameters(), opt.grad_clip)
         optimizer.step()
-
+        infos['TrainLoss'] = loss.data[0]
+        infos['mixer_from'] = opt.mixer_from
+        infos['num_robust'] = opt.num_robust
+        
         if infos['iter'] % opt.print_log_interval == 0:
             elapsed_time = time.time() - t_start
 
             log_info = [('Epoch', infos['epoch']),
                         ('Iter', infos['iter']),
-                        ('Loss', loss.data[0])]
+                        ('Loss', infos['TrainLoss'])]
 
             if scst_training and opt.use_scst == 1:
                 log_info += [('Reward', np.mean(reward[:, 0])),
@@ -242,7 +250,7 @@ def train(
                     sort_keys=True))
             infos.update(results['scores'])
 
-            check_model(model, opt, infos)
+            check_model(model, opt, infos, infos_history)
             checkpoint_checked = True
 
         if (infos['epoch'] >= opt.max_epochs or
@@ -336,7 +344,7 @@ def test(model, criterion, loader, opt):
     logger.info('Wrote output caption to: %s ', opt.result_file)
 
 
-def check_model(model, opt, infos):
+def check_model(model, opt, infos, infos_history):
 
     if opt.eval_metric == 'MSRVTT':
         current_score = infos['Bleu_4'] + \
@@ -345,11 +353,11 @@ def check_model(model, opt, infos):
         current_score = infos[opt.eval_metric]
 
     # write the full model checkpoint as well if we did better than ever
-    if current_score > infos['best_score']:
+    if current_score >= infos['best_score']:
         infos['best_score'] = current_score
         infos['best_iter'] = infos['iter']
         infos['best_epoch'] = infos['epoch']
-
+        
         logger.info(
             '>>> Found new best [%s] score: %f, at iter: %d, epoch %d',
             opt.eval_metric,
@@ -369,6 +377,11 @@ def check_model(model, opt, infos):
                     infos['best_iter'],
                     infos['best_epoch'])
 
+    infos_history[infos['epoch']] = infos.copy()
+    with open(opt.history_file, 'w') as of:
+        json.dump(infos_history, of)
+    logger.info('Updated history to: %s', opt.history_file)
+    
 if __name__ == '__main__':
 
     opt = opts.parse_opts()
@@ -425,7 +438,8 @@ if __name__ == '__main__':
     opt.vocab_size = train_loader.get_vocab_size()
     opt.seq_length = train_loader.get_seq_length()
     opt.feat_dims = train_loader.get_feat_dims()
-
+    opt.history_file = opt.model_file.replace('.pth', '_history.json', 1)
+    
     logger.info('Building model...')
     model = CaptionModel(opt)
 

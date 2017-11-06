@@ -107,7 +107,7 @@ def language_eval(gold_file, pred_file):
 
     out = {}
     for metric, score in cocoEval.eval.items():
-        out[metric] = round(score, 3)
+        out[metric] = round(score, 5)
 
     # restore the previous stdout
     sys.stdout = temp
