@@ -25,6 +25,11 @@ sys.path.append("cider")
 from pyciderevalcap.cider.cider import Cider
 from pyciderevalcap.ciderD.ciderD import CiderD
 
+sys.path.append('coco-caption')
+from pycocoevalcap.bleu.bleu import Bleu
+from pycocoevalcap.meteor.meteor import Meteor
+from pycocoevalcap.rouge.rouge import Rouge
+
 logger = logging.getLogger(__name__)
 
 
@@ -103,7 +108,13 @@ def train(
                 'epoch'] >= opt.use_scst_after and not scst_training:
             logger.info('Start training using SCST objective...')
             scst_training = True
-            CiderD_scorer = CiderD(df=opt.train_cached_tokens)
+            bcmr_scorer = {
+                'Bleu_4': Bleu(),
+                'CIDEr': CiderD(df=opt.train_cached_tokens),
+                'METEROR': Meteor(),
+                'ROUGE_L': Rouge()
+                }[opt.eval_metric]
+            
             #logger.info('loading gt refs: %s', train_loader.cocofmt_file)
             #gt_refs = utils.load_gt_refs(train_loader.cocofmt_file)
 
@@ -170,19 +181,19 @@ def train(
             """
  
             if opt.use_robust == 1:
-                ciderscores = None
-                if opt.use_mixer == 0 and data['ciderscores'] is not None:
-                    ciderscores = data['ciderscores']
+                bcmrscores = None
+                if opt.use_mixer == 0 and data['bcmrscores'] is not None:
+                    bcmrscores = data['bcmrscores']
                     
-                reward, m_score, g_score = utils.get_robust_critical_reward(model_res, data['gts'], CiderD_scorer,
-                                                                            scores=ciderscores,
+                reward, m_score, g_score = utils.get_robust_critical_reward(model_res, data['gts'], bcmr_scorer,
+                                                                            scores=bcmrscores,
                                                                           expand_feat=opt.expand_feat,
                                                                           seq_per_img=train_loader.get_seq_per_img(),
                                                                           num_robust=num_robust,
                                                                           use_robust_baseline=opt.use_robust_baseline
                                                                          )
             else:
-                reward, m_score, g_score = utils.get_self_critical_reward(model_res, baseline_res, data['gts'], CiderD_scorer,
+                reward, m_score, g_score = utils.get_self_critical_reward(model_res, baseline_res, data['gts'], bcmr_scorer,
                                                                           expand_feat=opt.expand_feat,
                                                                           seq_per_img=train_loader.get_seq_per_img())
                 
@@ -224,8 +235,8 @@ def train(
 
             if scst_training and opt.use_scst == 1:
                 log_info += [('Reward', np.mean(reward[:, 0])),
-                             ('Cider-D (m)', m_score),
-                             ('Cider-D (g)', g_score)]
+                             ('{} (m)'.format(opt.eval_metric), m_score),
+                             ('{} (b)'.format(opt.eval_metric), g_score)]
             
             if opt.use_ss == 1:
                 log_info += [('ss_prob', opt.ss_prob)]
@@ -418,7 +429,8 @@ if __name__ == '__main__':
                  'batch_size': opt.batch_size,
                  'feat_h5': opt.train_feat_h5,
                  'cocofmt_file': opt.train_cocofmt_file,
-                 'ciderscores_pkl': opt.train_ciderscores_pkl,
+                 'bcmrscores_pkl': opt.train_bcmrscores_pkl,
+                 'eval_metric': opt.eval_metric,
                  'seq_per_img': opt.train_seq_per_img,
                  'num_chunks': opt.num_chunks,
                  'mode': 'train'

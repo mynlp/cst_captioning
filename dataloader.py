@@ -29,7 +29,7 @@ class DataLoader():
         self.num_chunks = opt.get('num_chunks', 1)
         self.mode = opt.get('mode', 'train')
         self.cocofmt_file = opt.get('cocofmt_file', None)
-        self.ciderscores_pkl = opt.get('ciderscores_pkl', None)
+        self.bcmrscores_pkl = opt.get('bcmrscores_pkl', None)
 
         # open the hdf5 info file
         logger.info('DataLoader loading h5 file: %s', opt['label_h5'])
@@ -67,9 +67,13 @@ class DataLoader():
         else:
             self.has_label = False
 
-        if self.ciderscores_pkl is not None:
-            logger.info('Loading: %s', self.ciderscores_pkl)
-            self.ciderscores = cPickle.load(open(self.ciderscores_pkl))['cider']
+        if self.bcmrscores_pkl is not None:
+            eval_metric = opt.get('eval_metric', 'CIDEr')
+            logger.info('Loading: %s, with metric: %s', self.bcmrscores_pkl, eval_metric)
+            self.bcmrscores = cPickle.load(open(self.bcmrscores_pkl))
+            if eval_metric == 'CIDEr' and eval_metric not in self.bcmrscores:
+                eval_metric = 'cider'
+            self.bcmrscores = self.bcmrscores[eval_metric]
             
         if self.mode == 'train':
             self.shuffle_videos()
@@ -97,7 +101,7 @@ class DataLoader():
 
         videoids_batch = []
         gts = []
-        ciderscores = np.zeros((self.batch_size, self.seq_per_img)) if self.ciderscores_pkl is not None else None
+        bcmrscores = np.zeros((self.batch_size, self.seq_per_img)) if self.bcmrscores_pkl is not None else None
         
         for ii in range(self.batch_size):
             idx = self.index[self.iterator]
@@ -141,8 +145,8 @@ class DataLoader():
 
                 # pre-computed cider scores, 
                 # assuming now that videos order are same (which is the sorted videos order)
-                if self.ciderscores_pkl is not None:
-                    ciderscores[ii] = self.ciderscores[idx]
+                if self.bcmrscores_pkl is not None:
+                    bcmrscores[ii] = self.bcmrscores[idx]
                     
             self.iterator += 1
             if self.iterator >= self.num_videos:
@@ -166,7 +170,7 @@ class DataLoader():
             data['labels'] = label_batch
             data['masks'] = mask_batch
             data['gts'] = gts
-            data['ciderscores'] = ciderscores
+            data['bcmrscores'] = bcmrscores
 
         return data
 

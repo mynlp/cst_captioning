@@ -157,7 +157,7 @@ TEST_OPT=--beam_size $(BEAM_SIZE) \
 	--loglevel $(LOGLEVEL) \
 	--result_file $@
 
-train: $(patsubst %,$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth,$(FEATS))
+train2: $(patsubst %,$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth,$(FEATS))
 $(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth: \
 	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
 	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_sequencelabel.h5 \
@@ -165,7 +165,7 @@ $(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth: \
 	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_cocofmt.json \
 	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_cocofmt.json \
 	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
-	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_ciderscores.pkl \
+	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_evalscores.pkl \
         $(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_%_mp$(NUM_CHUNKS).h5 \
 	$(FEAT_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_%_mp$(NUM_CHUNKS).h5 \
 	$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5 
@@ -204,7 +204,7 @@ $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth: \
 	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_cocofmt.json \
 	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_cocofmt.json \
 	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
-	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_ciderscores.pkl \
+	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_evalscores.pkl \
         $(patsubst %,$(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS)) \
 	$(patsubst %,$(FEAT_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS)) \
 	$(patsubst %,$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))

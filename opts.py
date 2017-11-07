@@ -48,7 +48,7 @@ def parse_opts():
         help='Gold captions in MSCOCO format to cal language metrics')
 
     parser.add_argument(
-        '--train_ciderscores_pkl',
+        '--train_bcmrscores_pkl',
         type=str,
         help='Pre-computed Cider-D metric for all captions')
     

@@ -5,13 +5,15 @@ import json
 import numpy as np
 from collections import OrderedDict
 
+sys.path.append("cider")
+from pyciderevalcap.ciderD.ciderD import CiderD
+
 sys.path.append('coco-caption')
 from pycocotools.coco import COCO
 from pycocoevalcap.eval import COCOEvalCap
 
 from pycocoevalcap.bleu.bleu import Bleu
 from pycocoevalcap.rouge.rouge import Rouge
-from pycocoevalcap.cider.cider import Cider
 from pycocoevalcap.meteor.meteor import Meteor
 
 import cPickle
@@ -57,7 +59,7 @@ def load_gt_refs(cocofmt_file):
     return out
 
 
-def computer_score(predictions, gt_refs, scorer):
+def compute_score(gt_refs, predictions, scorer):
     # use with standard package https://github.com/tylin/coco-caption
     # hypo = {p['image_id']: [p['caption']] for p in predictions}
 
@@ -136,8 +138,8 @@ def array_to_str(arr, use_eos=False):
 
 def get_self_critical_reward2(model_res, greedy_res, gt_refs, scorer):
 
-    model_score, model_scores = computer_score(model_res, gt_refs, scorer)
-    greedy_score, greedy_scores = computer_score(greedy_res, gt_refs, scorer)
+    model_score, model_scores = compute_score(model_res, gt_refs, scorer)
+    greedy_score, greedy_scores = compute_score(greedy_res, gt_refs, scorer)
     scores = model_scores - greedy_scores
 
     m_score = np.mean(model_scores)
@@ -152,15 +154,15 @@ def get_self_critical_reward(
         model_res,
         greedy_res,
         data_gts,
-        CiderD_scorer,
+        bcmr_scorer,
         expand_feat=0,
         seq_per_img=20):
     batch_size = model_res.size(0)
 
-    res = OrderedDict()
-
     model_res = model_res.cpu().numpy()
     greedy_res = greedy_res.cpu().numpy()
+    
+    res = OrderedDict()
     for i in range(batch_size):
         res[i] = [array_to_str(model_res[i])]
     for i in range(batch_size):
@@ -173,16 +175,26 @@ def get_self_critical_reward(
     
     #_, scores = Bleu(4).compute_score(gts, res)
     #scores = np.array(scores[3])
-
-    res = [{'image_id': i, 'caption': res[i]} for i in range(2 * batch_size)]
+    if isinstance(bcmr_scorer, CiderD):    
+        res = [{'image_id': i, 'caption': res[i]} for i in range(2 * batch_size)]
+        
     if expand_feat == 1:
         gts = {i: gts[(i % batch_size) // seq_per_img]
                for i in range(2 * batch_size)}
     else:
         gts = {i: gts[i % batch_size] for i in range(2 * batch_size)}
 
-    score, scores = CiderD_scorer.compute_score(gts, res)
-
+    score, scores = bcmr_scorer.compute_score(gts, res)
+    
+    # if bleu, only use bleu_4
+    if isinstance(bcmr_scorer, Bleu):
+        score = score[-1]
+        scores = scores[-1]
+    
+    # happens for BLeu and METEOR
+    if type(scores_i) == list:
+        scores = np.array(scores)
+    
     m_score = np.mean(scores[:batch_size])
     g_score = np.mean(scores[batch_size:])
 
@@ -196,7 +208,7 @@ def get_self_critical_reward(
 def get_robust_critical_reward(
         model_res,
         data_gts,
-        CiderD_scorer,
+        bcmr_scorer,
         scores=None,
         expand_feat=0,
         seq_per_img=20,
@@ -212,8 +224,10 @@ def get_robust_critical_reward(
     if scores is None:
         batch_size = model_res.size(0)
 
-        res = OrderedDict()
         model_res = model_res.cpu().numpy()
+        
+        
+        res = OrderedDict()
         for i in range(batch_size):
             res[i] = [array_to_str(model_res[i])]
 
@@ -222,14 +236,27 @@ def get_robust_critical_reward(
             gts[i] = [array_to_str(data_gts[i][j])
                       for j in range(len(data_gts[i]))]
 
-        res = [{'image_id': i, 'caption': res[i]} for i in range(batch_size)]
+        if isinstance(bcmr_scorer, CiderD):    
+            res = [{'image_id': i, 'caption': res[i]} for i in range(batch_size)]
+        
         if expand_feat == 1:
             gts = {i: gts[(i % batch_size) // seq_per_img]
                    for i in range(batch_size)}
         else:
             gts = {i: gts[i % batch_size] for i in range(batch_size)}
 
-        _, scores = CiderD_scorer.compute_score(gts, res)
+        _, scores = bcmr_scorer.compute_score(gts, res)
+        
+            
+        # if bleu, only use bleu_4
+        if isinstance(bcmr_scorer, Bleu):
+            score = score[-1]
+            scores = scores[-1]
+    
+        # happens for BLeu and METEOR
+        if type(scores_i) == list:
+            scores = np.array(scores)
+
         
         scores = scores.reshape(-1, seq_per_img)
         
