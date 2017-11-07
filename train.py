@@ -76,6 +76,7 @@ def train(
         
     if opt.use_scst == 1 and opt.use_scst_after == 0:
         opt.use_scst_after = infos['epoch']
+        opt.use_robust_after = infos['epoch']
         train_loader.set_current_epoch(infos['epoch'])
 
     while True:
@@ -106,25 +107,33 @@ def train(
             #logger.info('loading gt refs: %s', train_loader.cocofmt_file)
             #gt_refs = utils.load_gt_refs(train_loader.cocofmt_file)
 
-        opt.mixer_from = 0
         if opt.use_mixer == 1 and scst_training:
             #annealing_mixer = opt.ss_k / \
             #    (opt.ss_k + np.exp((infos['epoch'] - opt.use_scst_after) / opt.ss_k))
             #annealing_mixer = int(round(annealing_mixer * opt.seq_length))
             
-            annealing_mixer = opt.seq_length - int(np.ceil((infos['epoch']-opt.use_scst_after)/float(opt.mixer_increase_every)))
-            opt.mixer_from = max(1, annealing_mixer)
+            if opt.mixer_from == 0:
+                annealing_mixer = opt.seq_length - int(np.ceil((infos['epoch']-opt.use_scst_after)/float(opt.mixer_increase_every)))
+                opt.mixer_from = max(1, annealing_mixer)
+                
             model.set_mixer_from(opt.mixer_from)
         
-        if opt.use_robust == 1 and scst_training and opt.ss_k > 0:
+        if opt.use_robust == 1 and scst_training:
             # if opt.use_robust == 1 and opt.ss_k == 0,
             # then do not using annealing, but the fixed num_robust provided
             #annealing_robust = opt.ss_k / \
             #    (opt.ss_k + np.exp((infos['epoch'] - opt.use_scst_after) / opt.ss_k))
             #annealing_robust = int(round((1 - annealing_robust) * seq_per_img))
             
-            annealing_robust = int(np.ceil((infos['epoch']-opt.use_scst_after)/float(opt.robust_increase_every)))
-            opt.num_robust = min(annealing_robust, seq_per_img-1)
+            # do not use robust before fully mixed
+            if opt.use_mixer == 1 and opt.mixer_from > 1:
+                opt.use_robust_after = infos['epoch']
+                
+            # if opt.num_robust is 0, then use the annealing value, 
+            # otherwise, use the set value
+            if opt.num_robust == 0:
+                annealing_robust = int(np.ceil((infos['epoch']-opt.use_robust_after)/float(opt.robust_increase_every)))
+                opt.num_robust = min(annealing_robust, seq_per_img-1)
             
         optimizer.zero_grad()
         model.set_seq_per_img(seq_per_img)

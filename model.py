@@ -500,10 +500,14 @@ class CaptionModel(nn.Module):
                         if v['c'] == 0 or token_idx == self.seq_length - 2:
                             # END token special case here, or we reached the end.
                             # add the beam to a set of done beams
+                            if token_idx > 1: 
+				ppl = np.exp(-beam_logprobs_sum[vix] / (token_idx - 1))
+			    else:
+				ppl = 10000
                             self.done_beams[k].append({'seq': beam_seq[:, vix].clone(),
                                                        'logps': beam_seq_logprobs[:, vix].clone(),
                                                        'p': beam_logprobs_sum[vix],
-                                                       'ppl': np.exp(-beam_logprobs_sum[vix] / (token_idx - 1))
+                                                       'ppl': ppl 
                                                        })
 
                     # encode as vectors

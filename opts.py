@@ -292,6 +292,11 @@ def parse_opts():
         default=1,
         help='Use schedule sampling')
     parser.add_argument(
+        '--mixer_from',
+        type=int,
+        default=0,
+        help='If 0, then an annealing scheme will be used, based on mixer_increase_every')
+    parser.add_argument(
         '--mixer_increase_every',
         type=int,
         default=2,
@@ -301,6 +306,11 @@ def parse_opts():
         type=int,
         default=0,
         help='Use schedule sampling')
+    parser.add_argument(
+        '--use_robust_after',
+        type=int,
+        default=0,
+        help='Start robust training after this epoch')
     parser.add_argument(
         '--robust_increase_every',
         type=int,

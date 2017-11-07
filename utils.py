@@ -114,7 +114,7 @@ def language_eval(gold_file, pred_file):
     return out
 
 
-def array_to_str(arr, use_eos=True):
+def array_to_str(arr, use_eos=False):
     out = ''
     for i in range(len(arr)):
         if not use_eos and arr[i] == 0:
@@ -256,7 +256,6 @@ def get_robust_critical_reward(
                 #scores[ii] = max(scores[ii] - b, 0)
                 scores[ii][scores[ii]<=b] = 0
                 
-        scores = scores.reshape(-1)
     else:
         m_score = np.mean(scores)
         b_score = 0

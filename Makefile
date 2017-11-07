@@ -35,7 +35,7 @@ RNN_SIZE?=512
 
 PRINT_INTERVAL?=20
 MAX_PATIENCE?=5 # FOR EARLY STOPPING
-SAVE_CHECKPOINT_FROM?=10
+SAVE_CHECKPOINT_FROM?=1
 FEAT_SET=c3d
 
 MAX_EPOCHS?=200
@@ -61,6 +61,7 @@ NUM_ROBUST?=0
 R_BASELINE?=1
 USE_SCST?=0
 USE_MIXER?=0
+MIXER_FROM?=0
 SS_K?=100
 
 
@@ -143,7 +144,7 @@ TRAIN_OPT=--beam_size $(BEAM_SIZE) --max_patience $(MAX_PATIENCE) --eval_metric 
 	--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) \
 	--train_cached_tokens $(META_DIR)/$(TRAIN_DATASET)_train_cidercache.pkl \
 	--use_ss $(USE_SS) --ss_k $(SS_K) --use_scst_after $(USE_SS_AFTER) --ss_max_prob $(SS_MAX_PROB) \
-	--use_scst $(USE_SCST) --use_mixer $(USE_MIXER) \
+	--use_scst $(USE_SCST) --use_mixer $(USE_MIXER) --mixer_from $(MIXER_FROM) \
 	--use_robust $(USE_ROBUST) --num_robust $(NUM_ROBUST) --use_robust_baseline $(R_BASELINE) \
 	--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) \
 	--model_file $@ --start_from $(START_FROM) --result_file $(basename $@)_test.json \
