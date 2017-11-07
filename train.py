@@ -107,17 +107,20 @@ def train(
             #logger.info('loading gt refs: %s', train_loader.cocofmt_file)
             #gt_refs = utils.load_gt_refs(train_loader.cocofmt_file)
 
+        mixer_from = opt.mixer_from
         if opt.use_mixer == 1 and scst_training:
             #annealing_mixer = opt.ss_k / \
             #    (opt.ss_k + np.exp((infos['epoch'] - opt.use_scst_after) / opt.ss_k))
             #annealing_mixer = int(round(annealing_mixer * opt.seq_length))
             
-            if opt.mixer_from == 0:
+            # -1 for annealing
+            if opt.mixer_from == -1:
                 annealing_mixer = opt.seq_length - int(np.ceil((infos['epoch']-opt.use_scst_after)/float(opt.mixer_increase_every)))
-                opt.mixer_from = max(1, annealing_mixer)
+                mixer_from = max(1, annealing_mixer)
                 
-            model.set_mixer_from(opt.mixer_from)
+            model.set_mixer_from(mixer_from)
         
+        num_robust = opt.num_robust
         if opt.use_robust == 1 and scst_training:
             # if opt.use_robust == 1 and opt.ss_k == 0,
             # then do not using annealing, but the fixed num_robust provided
@@ -126,14 +129,14 @@ def train(
             #annealing_robust = int(round((1 - annealing_robust) * seq_per_img))
             
             # do not use robust before fully mixed
-            if opt.use_mixer == 1 and opt.mixer_from > 1:
+            if opt.use_mixer == 1 and mixer_from > 1:
                 opt.use_robust_after = infos['epoch']
                 
-            # if opt.num_robust is 0, then use the annealing value, 
+            # if opt.num_robust is -1, then use the annealing value, 
             # otherwise, use the set value
-            if opt.num_robust == 0:
+            if opt.num_robust == -1:
                 annealing_robust = int(np.ceil((infos['epoch']-opt.use_robust_after)/float(opt.robust_increase_every)))
-                opt.num_robust = min(annealing_robust, seq_per_img-1)
+                num_robust = min(annealing_robust, seq_per_img-1)    
             
         optimizer.zero_grad()
         model.set_seq_per_img(seq_per_img)
@@ -175,7 +178,7 @@ def train(
                                                                             scores=ciderscores,
                                                                           expand_feat=opt.expand_feat,
                                                                           seq_per_img=train_loader.get_seq_per_img(),
-                                                                          num_robust=opt.num_robust,
+                                                                          num_robust=num_robust,
                                                                           use_robust_baseline=opt.use_robust_baseline
                                                                          )
             else:
@@ -188,16 +191,16 @@ def train(
             rl_loss = 0
             xe_loss = 0
             # -1 because we don't count <eos> here
-            if opt.mixer_from < model_res.size(1)-1:
+            if mixer_from < model_res.size(1)-1:
                 rl_loss = rl_criterion(
-                    model_res[:,opt.mixer_from:],
-                    logprobs[:,opt.mixer_from:],
+                    model_res[:,mixer_from:],
+                    logprobs[:,mixer_from:],
                     Variable(
-                        torch.from_numpy(reward[:,opt.mixer_from:]).float().cuda(),
+                        torch.from_numpy(reward[:,mixer_from:]).float().cuda(),
                         requires_grad=False))
             
-            if opt.mixer_from > 0:
-                xe_loss = criterion(pred[:, :opt.mixer_from], labels[:, 1:opt.mixer_from+1], masks[:, 1:opt.mixer_from+1])
+            if mixer_from > 0:
+                xe_loss = criterion(pred[:, :mixer_from], labels[:, 1:mixer_from+1], masks[:, 1:mixer_from+1])
             
             loss = rl_loss + xe_loss
                 
@@ -209,8 +212,8 @@ def train(
         clip_grad_norm(model.parameters(), opt.grad_clip)
         optimizer.step()
         infos['TrainLoss'] = loss.data[0]
-        infos['mixer_from'] = opt.mixer_from
-        infos['num_robust'] = opt.num_robust
+        infos['mixer_from'] = mixer_from
+        infos['num_robust'] = num_robust
         
         if infos['iter'] % opt.print_log_interval == 0:
             elapsed_time = time.time() - t_start
@@ -228,10 +231,10 @@ def train(
                 log_info += [('ss_prob', opt.ss_prob)]
                 
             if opt.use_mixer == 1:
-                log_info += [('mixer', opt.mixer_from)]    
+                log_info += [('mixer', mixer_from)]    
                 
             if opt.use_robust == 1:
-                log_info += [('robust', opt.num_robust)]
+                log_info += [('robust', num_robust)]
                 
             log_info += [('Time', elapsed_time)]
             logger.info('%s', '\t'.join(

@@ -294,8 +294,8 @@ def parse_opts():
     parser.add_argument(
         '--mixer_from',
         type=int,
-        default=0,
-        help='If 0, then an annealing scheme will be used, based on mixer_increase_every')
+        default=-1,
+        help='If -1, then an annealing scheme will be used, based on mixer_increase_every')
     parser.add_argument(
         '--mixer_increase_every',
         type=int,
@@ -319,8 +319,8 @@ def parse_opts():
     parser.add_argument(
         '--num_robust',
         type=int,
-        default=0,
-        help='if not using annealing (set ss_k = 0), then using this fixed number to be the number of caption to be removed')
+        default=-1,
+        help='-1: annealing, otherwise using this fixed number to be the number of caption to be removed')
     parser.add_argument(
         '--use_robust_baseline',
         type=int,
