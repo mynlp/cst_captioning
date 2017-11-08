@@ -146,8 +146,8 @@ def train(
             # if opt.num_robust is -1, then use the annealing value, 
             # otherwise, use the set value
             if opt.num_robust == -1:
-                annealing_robust = int(np.ceil((infos['epoch']-opt.use_robust_after)/float(opt.robust_increase_every)))
-                num_robust = min(annealing_robust, seq_per_img-1)    
+                annealing_robust = int(np.ceil((infos['epoch']-opt.use_robust_after+1)/float(opt.robust_increase_every)))
+                num_robust = min(annealing_robust, seq_per_img-1)
             
         optimizer.zero_grad()
         model.set_seq_per_img(seq_per_img)
@@ -181,17 +181,15 @@ def train(
             """
  
             if opt.use_robust == 1:
-                bcmrscores = None
-                if opt.use_mixer == 0 and data['bcmrscores'] is not None:
-                    bcmrscores = data['bcmrscores']
-                    
+                bcmrscores = data['bcmrscores']    
                 reward, m_score, g_score = utils.get_robust_critical_reward(model_res, data['gts'], bcmr_scorer,
-                                                                            scores=bcmrscores,
+                                                                            bcmrscores=bcmrscores,
                                                                           expand_feat=opt.expand_feat,
                                                                           seq_per_img=train_loader.get_seq_per_img(),
                                                                           num_robust=num_robust,
                                                                           use_robust_baseline=opt.use_robust_baseline,
-                                                                            use_eos=opt.use_eos
+                                                                            use_eos=opt.use_eos,
+                                                                            use_mixer=opt.use_mixer
                                                                          )
             else:
                 reward, m_score, g_score = utils.get_self_critical_reward(model_res, baseline_res, data['gts'], bcmr_scorer,
