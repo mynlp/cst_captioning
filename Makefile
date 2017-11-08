@@ -60,6 +60,7 @@ USE_ROBUST?=0
 NUM_ROBUST?=-1
 R_BASELINE?=1
 USE_SCST?=0
+USE_EOS?=0
 USE_MIXER?=0
 MIXER_FROM?=-1
 SS_K?=100
@@ -146,7 +147,7 @@ TRAIN_OPT=--beam_size $(BEAM_SIZE) --max_patience $(MAX_PATIENCE) --eval_metric 
 	--use_ss $(USE_SS) --ss_k $(SS_K) --use_scst_after $(USE_SS_AFTER) --ss_max_prob $(SS_MAX_PROB) \
 	--use_scst $(USE_SCST) --use_mixer $(USE_MIXER) --mixer_from $(MIXER_FROM) \
 	--use_robust $(USE_ROBUST) --num_robust $(NUM_ROBUST) --use_robust_baseline $(R_BASELINE) \
-	--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) \
+	--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) --use_eos $(USE_EOS) \
 	--model_file $@ --start_from $(START_FROM) --result_file $(basename $@)_test.json \
 	2>&1 | tee $(basename $@).log
 

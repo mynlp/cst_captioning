@@ -157,7 +157,7 @@ TEST_OPT=--beam_size $(BEAM_SIZE) \
 	--loglevel $(LOGLEVEL) \
 	--result_file $@
 
-train2: $(patsubst %,$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth,$(FEATS))
+train: $(patsubst %,$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth,$(FEATS))
 $(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth: \
 	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
 	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_sequencelabel.h5 \

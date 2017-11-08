@@ -111,7 +111,7 @@ def train(
             bcmr_scorer = {
                 'Bleu_4': Bleu(),
                 'CIDEr': CiderD(df=opt.train_cached_tokens),
-                'METEROR': Meteor(),
+                'METEOR': Meteor(),
                 'ROUGE_L': Rouge()
                 }[opt.eval_metric]
             
@@ -141,7 +141,7 @@ def train(
             
             # do not use robust before fully mixed
             if opt.use_mixer == 1 and mixer_from > 1:
-                opt.use_robust_after = infos['epoch']
+                opt.use_robust_after = infos['epoch'] - 1
                 
             # if opt.num_robust is -1, then use the annealing value, 
             # otherwise, use the set value
@@ -190,12 +190,14 @@ def train(
                                                                           expand_feat=opt.expand_feat,
                                                                           seq_per_img=train_loader.get_seq_per_img(),
                                                                           num_robust=num_robust,
-                                                                          use_robust_baseline=opt.use_robust_baseline
+                                                                          use_robust_baseline=opt.use_robust_baseline,
+                                                                            use_eos=opt.use_eos
                                                                          )
             else:
                 reward, m_score, g_score = utils.get_self_critical_reward(model_res, baseline_res, data['gts'], bcmr_scorer,
                                                                           expand_feat=opt.expand_feat,
-                                                                          seq_per_img=train_loader.get_seq_per_img())
+                                                                          seq_per_img=train_loader.get_seq_per_img(),
+                                                                          use_eos=opt.use_eos)
                 
             
             #import pdb; pdb.set_trace()

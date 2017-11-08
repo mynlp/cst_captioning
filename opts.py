@@ -326,6 +326,11 @@ def parse_opts():
         type=int,
         default=1,
         help='Use schedule sampling')
+    parser.add_argument(
+        '--use_eos',
+        type=int,
+        default=0,
+        help='Use schedule sampling')
     
     args = parser.parse_args()
     return args
