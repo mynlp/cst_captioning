@@ -231,7 +231,6 @@ def get_robust_critical_reward(
 
         model_res = model_res.cpu().numpy()
         
-        
         res = OrderedDict()
         for i in range(batch_size):
             res[i] = [array_to_str(model_res[i], use_eos)]
@@ -270,37 +269,30 @@ def get_robust_critical_reward(
         
     if num_robust > 0:
         # use removed sentences as baseline
+        # have tried the average baseline,
+        # but it seems to not work well
+        # so an annealing schedule is necessary
         
-        if use_robust_baseline == 2: 
-            # use average baseline
-            m_score = np.mean(scores)
-            b_score = m_score
-            mean_scores = np.mean(scores, 1).reshape(-1,1).repeat(seq_per_img, axis=1)
-            scores = scores - mean_scores
-            
-        else:
-            sorted_scores = np.sort(scores, axis=1)
-
-            if use_mixer == 1 and bcmrscores is not None:
-                sorted_bcmrscores = np.sort(bcmrscores, axis=1)
-                b = sorted_bcmrscores[:,num_robust-1]
+        sorted_scores = np.sort(scores, axis=1)
+        
+        m_score = np.mean(sorted_scores[:,num_robust:])
+        b_score = np.mean(sorted_scores[:,:num_robust])
+        
+        for ii in range(scores.shape[0]):
+            if use_robust_baseline == 1:
+                # note: may need to reculate b, use the max value, 
+                # rathan the average, as in the else statement
+                # update: have tried the max value
+                # however, it does not work
+                b = np.mean(sorted_scores[ii,:num_robust])
+                scores[ii] = scores[ii] - b
             else:
-                b = sorted_scores[:,num_robust-1]
-
-            for ii in range(scores.shape[0]):
-                if use_robust_baseline == 0:
-                    # to turn off backprobs
-                    # however, negative scores may be also be helpful to learn
-                    #scores[ii] = max(scores[ii] - b, 0)
-                    scores[ii][scores[ii]<=b[ii]] = 0
-                elif use_robust_baseline == 1:
-                    # note: may need to reculate b, use the max value, 
-                    # rathan the average, as in the else statement
-                    scores[ii] = scores[ii] - b[ii]
-
-            m_score = np.mean(sorted_scores[:,num_robust:])
-            b_score = np.mean(b)
-
+                # to turn off backprobs
+                # however, negative scores may be also be helpful to learn
+                b = sorted_scores[ii, num_robust]
+                #scores[ii] = max(scores[ii] - b, 0)
+                scores[ii][scores[ii]<=b] = 0
+                
     else:
         m_score = np.mean(scores)
         b_score = 0

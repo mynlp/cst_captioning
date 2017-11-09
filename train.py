@@ -126,7 +126,7 @@ def train(
             
             # -1 for annealing
             if opt.mixer_from == -1:
-                annealing_mixer = opt.seq_length - int(np.ceil((infos['epoch']-opt.use_scst_after)/float(opt.mixer_increase_every)))
+                annealing_mixer = opt.seq_length - int(np.ceil((infos['epoch']-opt.use_scst_after+1)/float(opt.mixer_increase_every)))
                 mixer_from = max(1, annealing_mixer)
                 
             model.set_mixer_from(mixer_from)
@@ -140,8 +140,8 @@ def train(
             #annealing_robust = int(round((1 - annealing_robust) * seq_per_img))
             
             # do not use robust before fully mixed
-            if opt.use_mixer == 1 and mixer_from > 1:
-                opt.use_robust_after = infos['epoch'] - 1
+            # if opt.use_mixer == 1 and mixer_from > 1:
+            #    opt.use_robust_after = infos['epoch']
                 
             # if opt.num_robust is -1, then use the annealing value, 
             # otherwise, use the set value
@@ -162,13 +162,13 @@ def train(
             
             if opt.use_robust == 0:
                 # greedy decoding baseline
-                baseline_res, _ = model.sample([Variable(f.data, volatile=True) for f in feats],
+                greedy_baseline, _ = model.sample([Variable(f.data, volatile=True) for f in feats],
                                            {'sample_max': 1, 'expand_feat': opt.expand_feat})
 
             """
             if opt.loglevel.upper() == 'DEBUG' and opt.use_robust == 0:
                 model_sents = utils.decode_sequence(opt.vocab, model_res)
-                baseline_sents = utils.decode_sequence(opt.vocab, baseline_res)
+                baseline_sents = utils.decode_sequence(opt.vocab, greedy_baseline)
                 for jj, sent in enumerate(zip(model_sents, baseline_sents)):
                     if opt.expand_feat == 1:
                         video_id = data['ids'][
@@ -192,16 +192,18 @@ def train(
                                                                             use_mixer=opt.use_mixer
                                                                          )
             else:
-                reward, m_score, g_score = utils.get_self_critical_reward(model_res, baseline_res, data['gts'], bcmr_scorer,
+                reward, m_score, g_score = utils.get_self_critical_reward(model_res, greedy_baseline, data['gts'], bcmr_scorer,
                                                                           expand_feat=opt.expand_feat,
                                                                           seq_per_img=train_loader.get_seq_per_img(),
                                                                           use_eos=opt.use_eos)
                 
             
+            """[[
             #import pdb; pdb.set_trace()
             rl_loss = 0
             xe_loss = 0
             # -1 because we don't count <eos> here
+            
             if mixer_from < model_res.size(1)-1:
                 rl_loss = rl_criterion(
                     model_res[:,mixer_from:],
@@ -214,7 +216,15 @@ def train(
                 xe_loss = criterion(pred[:, :mixer_from], labels[:, 1:mixer_from+1], masks[:, 1:mixer_from+1])
             
             loss = rl_loss + xe_loss
-                
+            """
+            
+            loss = rl_criterion(
+                    model_res,
+                    logprobs,
+                    Variable(
+                        torch.from_numpy(reward).float().cuda(),
+                        requires_grad=False))
+            
         else:
             pred = model(feats, labels)[0]
             loss = criterion(pred, labels[:, 1:], masks[:, 1:])
