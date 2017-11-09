@@ -271,27 +271,35 @@ def get_robust_critical_reward(
     if num_robust > 0:
         # use removed sentences as baseline
         
-        sorted_scores = np.sort(scores, axis=1)
-        
-        if use_mixer == 1 and bcmrscores is not None:
-            sorted_bcmrscores = np.sort(bcmrscores, axis=1)
-            b = sorted_bcmrscores[:,num_robust-1]
-        else:
-            b = sorted_scores[:,num_robust-1]
+        if use_robust_baseline == 2: 
+            # use average baseline
+            m_score = np.mean(scores)
+            b_score = m_score
+            mean_scores = np.mean(scores, 1).reshape(-1,1).repeat(seq_per_img, axis=1)
+            scores = scores - mean_scores
             
-        for ii in range(scores.shape[0]):
-            if use_robust_baseline == 1:
-                # note: may need to reculate b, use the max value, 
-                # rathan the average, as in the else statement
-                scores[ii] = scores[ii] - b[ii]
+        else:
+            sorted_scores = np.sort(scores, axis=1)
+
+            if use_mixer == 1 and bcmrscores is not None:
+                sorted_bcmrscores = np.sort(bcmrscores, axis=1)
+                b = sorted_bcmrscores[:,num_robust-1]
             else:
-                # to turn off backprobs
-                # however, negative scores may be also be helpful to learn
-                #scores[ii] = max(scores[ii] - b, 0)
-                scores[ii][scores[ii]<=b[ii]] = 0
-        
-        m_score = np.mean(sorted_scores[:,num_robust:])
-        b_score = np.mean(b)
+                b = sorted_scores[:,num_robust-1]
+
+            for ii in range(scores.shape[0]):
+                if use_robust_baseline == 0:
+                    # to turn off backprobs
+                    # however, negative scores may be also be helpful to learn
+                    #scores[ii] = max(scores[ii] - b, 0)
+                    scores[ii][scores[ii]<=b[ii]] = 0
+                elif use_robust_baseline == 1:
+                    # note: may need to reculate b, use the max value, 
+                    # rathan the average, as in the else statement
+                    scores[ii] = scores[ii] - b[ii]
+
+            m_score = np.mean(sorted_scores[:,num_robust:])
+            b_score = np.mean(b)
 
     else:
         m_score = np.mean(scores)
