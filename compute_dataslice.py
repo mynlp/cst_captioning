@@ -90,6 +90,7 @@ if __name__ == "__main__":
     
     with open(args.output_txt, 'w') as f:
         for i, v in enumerate(scores):
-            f.write('{}, {}\n'.format(i, v))
+            #f.write('{}, {}\n'.format(i, v))
+            f.write('{}\n'.format(round(v*100, 3)))
         
     logger.info('Time: %s', datetime.now() - start)

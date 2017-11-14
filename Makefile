@@ -74,7 +74,7 @@ FEAT5?=vgg16
 FEAT6?=vgg19
 
 #FEATS=$(FEAT1) $(FEAT2) $(FEAT3) $(FEAT5) $(FEAT6)
-FEATS=$(FEAT1) $(FEAT2) $(FEAT6)
+FEATS?=$(FEAT1) $(FEAT2) $(FEAT3) $(FEAT4)
 
 TRAIN_ID=$(TRAIN_DATASET)_$(MODEL_TYPE)_$(EVAL_METRIC)_$(BATCH_SIZE)_$(LEARNING_RATE)
 
@@ -249,7 +249,12 @@ compute_dataslice:
 	python compute_dataslice.py \
 		$(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID)_test.json \
 		$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
-		$(META_DIR)/$(TRAIN_DATASET)_test_ciderscores.pkl rl.txt
+		$(META_DIR)/$(TRAIN_DATASET)_test_ciderscores.pkl cst_rl_scb.txt
+
+compute_dataslice_cvpr2018: $(patsubst %,$(MODEL_DIR)/cvpr2018_results/%_dataslice.txt,XE CST_XE CST_XE_SCB CST_RL_SCB CST_RL_Greedy)
+%_dataslice.txt: %_test.json $(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
+       $(META_DIR)/$(TRAIN_DATASET)_test_ciderscores.pkl 
+	python compute_dataslice.py $^ $@
 
 compute_ciderd:
 	python compute_ciderd.py \

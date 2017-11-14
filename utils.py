@@ -275,8 +275,13 @@ def get_robust_critical_reward(
         
         sorted_scores = np.sort(scores, axis=1)
         
-        m_score = np.mean(sorted_scores[:,num_robust:])
-        b_score = np.mean(sorted_scores[:,:num_robust])
+        if use_robust_baseline != 1:
+            sorted_bcmrscores = np.sort(bcmrscores, axis=1)
+            m_score = np.mean(scores)
+            b_score = np.mean(bcmrscores)
+        else:
+            m_score = np.mean(sorted_scores[:,num_robust:])
+            b_score = np.mean(sorted_scores[:,:num_robust])
         
         for ii in range(scores.shape[0]):
             if use_robust_baseline == 1:
@@ -289,9 +294,11 @@ def get_robust_critical_reward(
             else:
                 # to turn off backprobs
                 # however, negative scores may be also be helpful to learn
-                b = sorted_scores[ii, num_robust]
+                # b = sorted_scores[ii, num_robust]
                 #scores[ii] = max(scores[ii] - b, 0)
-                scores[ii][scores[ii]<=b] = 0
+                #scores[ii][scores[ii]<=b] = 0
+                b = np.mean(sorted_bcmrscores[ii,:num_robust])
+                scores[ii] = scores[ii] - b
                 
     else:
         m_score = np.mean(scores)
