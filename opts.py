@@ -331,6 +331,12 @@ def parse_opts():
         type=int,
         default=0,
         help='Use schedule sampling')
+    parser.add_argument(
+        '--output_logp',
+        type=int,
+        default=0,
+        help='Output average log likehood of the test and GT captions. Used for robustness analysis at test time.')
+    
     
     args = parser.parse_args()
     return args

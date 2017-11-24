@@ -156,6 +156,7 @@ TEST_OPT=--beam_size $(BEAM_SIZE) \
 	--test_seq_per_img $(TEST_SEQ_PER_IMG) \
 	--test_batch_size $(BATCH_SIZE) \
 	--loglevel $(LOGLEVEL) \
+	--output_logp 1 \
 	--result_file $@
 
 train: $(patsubst %,$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth,$(FEATS))
@@ -251,10 +252,14 @@ compute_dataslice:
 		$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
 		$(META_DIR)/$(TRAIN_DATASET)_test_ciderscores.pkl cst_rl_scb.txt
 
-compute_dataslice_cvpr2018: $(patsubst %,$(MODEL_DIR)/cvpr2018_results/%_dataslice.txt,XE CST_XE CST_XE_SCB CST_RL_SCB CST_RL_Greedy)
+compute_dataslice_cvpr2018: $(patsubst %,$(MODEL_DIR)/cvpr2018_results/%_dataslice.txt,XE CST_GT_None CST_MS_Greedy CST_MS_HCB CST_MS_MCB SCST)
 %_dataslice.txt: %_test.json $(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
        $(META_DIR)/$(TRAIN_DATASET)_test_ciderscores.pkl 
 	python compute_dataslice.py $^ $@
+
+compute_dataslice_logp: $(patsubst %,$(MODEL_DIR)/cvpr2018_results/%_dataslice_logp.txt,XE CST_GT_None CST_GT_R CST_GT_HCB CST_MS_HCB CST_MS_MCB CST_MS_Greedy)
+%_dataslice_logp.txt: %_test.json %_avglogps.pkl 
+	python compute_dataslice_logp.py $^ $@
 
 compute_ciderd:
 	python compute_ciderd.py \
@@ -262,6 +267,12 @@ compute_ciderd:
 		$(META_DIR)/$(TRAIN_DATASET)_test_cidercacheall_words.pkl \
 		$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json 
 	
+compute_pred_cider: $(patsubst %,$(MODEL_DIR)/cvpr2018_results2/%_testupdate.json,XE CST_GT_None CST_MS_HCB CST_MS_MCB)
+%_testupdate.json: $(META_DIR)/$(TRAIN_DATASET)_test_cocofmt.json\
+       	$(META_DIR)/$(TRAIN_DATASET)_test_evalscores.pkl \
+	%_test.json \
+	$(META_DIR)/$(TRAIN_DATASET)_test_cidercacheall_words.pkl 
+	python compute_prediction_scores.py $^ $@
 
 # You can use the wildcard with .PRECIOUS.
 .PRECIOUS: %.pth

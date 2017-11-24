@@ -13,6 +13,7 @@ import json
 import uuid
 import logging
 from datetime import datetime
+from six.moves import cPickle
 
 from dataloader import DataLoader
 from model import CaptionModel, CrossEntropyCriterion, RewardCriterion
@@ -197,7 +198,6 @@ def train(
                                                                           seq_per_img=train_loader.get_seq_per_img(),
                                                                           use_eos=opt.use_eos)
                 
-            
             """[[
             #import pdb; pdb.set_trace()
             rl_loss = 0
@@ -228,7 +228,7 @@ def train(
         else:
             pred = model(feats, labels)[0]
             loss = criterion(pred, labels[:, 1:], masks[:, 1:])
-
+        
         loss.backward()
         clip_grad_norm(model.parameters(), opt.grad_clip)
         optimizer.step()
@@ -313,6 +313,8 @@ def validate(model, criterion, loader, opt):
         batch_size,
         seq_per_img)
     predictions = []
+    gt_avglogps = []
+    test_avglogps = []
     for ii in range(num_iters):
         data = loader.get_batch()
         feats = [Variable(feat, volatile=True) for feat in data['feats']]
@@ -335,15 +337,25 @@ def validate(model, criterion, loader, opt):
                 masks = masks.cuda()
 
         if loader.has_label:
-            pred = model(feats, labels)[0]
+            pred, gt_seq, gt_logseq = model(feats, labels)
+            if opt.output_logp == 1:
+                gt_avglogp = utils.compute_avglogp(gt_seq, gt_logseq.data)
+                gt_avglogps.extend(gt_avglogp)
+                
             loss = criterion(pred, labels[:, 1:], masks[:, 1:])
             loss_sum += loss.data[0]
 
-        seq, _ = model.sample(feats, {'beam_size': opt.beam_size})
+        seq, logseq = model.sample(feats, {'beam_size': opt.beam_size})
         sents = utils.decode_sequence(opt.vocab, seq)
-
+        if opt.output_logp == 1:
+            test_avglogp = utils.compute_avglogp(seq, logseq)
+            test_avglogps.extend(test_avglogp)
+        
         for jj, sent in enumerate(sents):
-            entry = {'image_id': data['ids'][jj], 'caption': sent}
+            if opt.output_logp == 1:
+                entry = {'image_id': data['ids'][jj], 'caption': sent, 'avglogp': test_avglogp[jj]}
+            else:
+                entry = {'image_id': data['ids'][jj], 'caption': sent}
             predictions.append(entry)
             logger.debug('[%d] video %s: %s' %
                          (jj, entry['image_id'], entry['caption']))
@@ -364,7 +376,20 @@ def validate(model, criterion, loader, opt):
     results['predictions'] = predictions
     results['scores'] = {'Loss': -loss}
     results['scores'].update(lang_stats)
-
+    
+    if opt.output_logp == 1:
+        avglogp = sum(test_avglogps)/float(len(test_avglogps))
+        results['scores'].update({'avglogp': avglogp})
+        
+        gt_avglogps = np.array(gt_avglogps).reshape(-1, seq_per_img)
+        assert num_videos == gt_avglogps.shape[0]
+        
+        gt_avglogps_file = opt.model_file.replace('.pth', '_gt_avglogps.pkl', 1)
+        cPickle.dump(gt_avglogps, open(
+            gt_avglogps_file, 'w'), protocol=cPickle.HIGHEST_PROTOCOL)
+        
+        logger.info('Wrote GT logp to: %s', gt_avglogps_file)
+        
     return results
 
 

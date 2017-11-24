@@ -75,9 +75,8 @@ def compute_score(gt_refs, predictions, scorer):
 
     return score, scores
 
+
 # Input: seq, N*D numpy array, with element 0 .. vocab_size. 0 is END token.
-
-
 def decode_sequence(ix_to_word, seq):
     N, D = seq.size()
     out = []
@@ -94,6 +93,23 @@ def decode_sequence(ix_to_word, seq):
         out.append(txt)
     return out
 
+# Input: seq, N*D numpy array, with element 0 .. vocab_size. 0 is END token.
+def compute_avglogp(seq, logseq, eos_token=0):
+    seq = seq.cpu().numpy()
+    logseq = logseq.cpu().numpy()
+    
+    N, D = seq.shape
+    out_avglogp = []
+    for i in range(N):
+        avglogp = []
+        for j in range(D):
+            ix = seq[i, j]
+            avglogp.append(logseq[i, j])
+            if ix == eos_token:
+                break
+        avg = 0 if len(avglogp) == 0 else sum(avglogp)/float(len(avglogp))
+        out_avglogp.append(avg)
+    return out_avglogp
 
 def language_eval(gold_file, pred_file):
 

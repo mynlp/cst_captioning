@@ -1,0 +1,96 @@
+{% extends 'v2t_base.html' %}
+
+{% block body %}
+
+
+{% if not data.videos %}
+
+<form action="{{ url_for('videos') }}" method="get">
+  <div class="home-class">
+      <p>Select a dataset:</p>
+      <select name="dataset">
+      {% for dataset in config.datasets %}
+      <option value="{{ dataset }}">{{ dataset }}</option>
+      {% endfor %}
+      </select>
+      <p>Select a split:</p>
+      <select name="split">
+      {% for split in config.splits %}
+      <option value="{{ split }}">{{ split }}</option>
+      {% endfor %}
+      </select>
+      {% if data.dataset == 'msrvtt' %}
+      <p>Select Category:</p>
+      <select name="category">
+      {% for cat in config.categories %}
+      <option value="{{ cat }}">{{ cat }}</option>
+      {% endfor %}
+      {% endif %}    
+      </select>
+  </div>
+<input type="submit" value="Submit">
+</form>    
+
+{% else %}
+  {{ data.pagination.info }}
+  {{ data.pagination.links }}
+  <div class="table-responsive">
+    <table class="table table-hover">
+    <thead>
+      <tr><th>#</th><th>Video</th><th>Predictions / Ground truth</th></tr>
+    </thead>
+    <tbody>
+      {% for video in data.videos %}
+      <tr>
+      <td>{{ loop.index + (config.page - 1) * config.per_page }} [video{{video.id}}]</td>
+      <td>
+          <!-- <img src='{{ url_for('static', filename = video.keyframe) }}' 
+               alt='{{ video.video_id }}' BORDER='0'/> -->
+         <video id="{{ video.id }}" class="video-js" controls preload="auto" width="320" height="240"
+  poster="{{ url_for('static', filename=video.keyframe) }}" data-setup="{}">
+    <source src="{{ url_for('static', filename=video.videopath) }}" type='video/mp4'>
+    <p class="vjs-no-js">
+      To view this video please enable JavaScript, and consider upgrading to a web browser that
+      <a href="http://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>
+    </p>
+  </video> 
+          </td>
+          <td>
+              
+              <h4>Ground truth:</h4>
+                  <ol type="1">
+                  {% for caption in video.captions %}
+                  <li> {{ caption }}</li>
+                  {% endfor %}
+                  </ol>
+              
+          </td>
+          
+          <td>
+              
+              <h4>BCMR:</h4>
+                  <ol type="1">
+                  {% for bcmr in video.bcmrscores %}
+                  <li> {{ bcmr }}</li>
+                  {% endfor %}
+                  </ol>
+              
+          </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    </table>
+  </div>
+  {{ data.pagination.links }}
+{% endif %}
+
+
+{% endblock %}
+
+{% block js %}
+  {% if active_url %}
+    $('#{{ active_url }}').addClass('active');
+  {% else %}
+  $('#videos-url').addClass('active');
+  {% endif %}
+{% endblock %}

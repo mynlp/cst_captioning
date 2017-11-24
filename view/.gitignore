@@ -1,0 +1,5 @@
+# directories
+static/v2t
+
+# files
+*.pyc
