@@ -128,7 +128,7 @@ def train(
             
             # -1 for annealing
             if opt.mixer_from == -1:
-                annealing_mixer = opt.seq_length - int(np.ceil((infos['epoch']-opt.use_rl_after+1)/float(opt.mixer_increase_every)))
+                annealing_mixer = opt.seq_length - int(np.ceil((infos['epoch']-opt.use_rl_after+1)/float(opt.mixer_descrease_every)))
                 mixer_from = max(1, annealing_mixer)
                 
             model.set_mixer_from(mixer_from)
