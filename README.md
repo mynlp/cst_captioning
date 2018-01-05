@@ -21,7 +21,7 @@ make pre_process
 ```
 this will run `standalize_datainfo` `preprocess_datainfo` `build_vocab` `create_sequencelabel` `convert_datainfo2cocofmt`
 
-Create cached of document frequency for CIDEr computation
+Pre-compute document frequency for CIDEr computation
 ```bash
 make compute_ciderdf
 ```
@@ -49,44 +49,31 @@ Please refer to the Makefile and the opts.py file for the set of available train
 ## Examples of using make rules for training:
 * Cross-entropy Training (XE)
 ```bash
-make train_multimodal GID=0 MODEL_TYPE=concat EXP_NAME=XE \
-FEATS="resnet c3d mfcc category" USE_SS_AFTER=0 USE_ROBUST=0 \
-USE_MIXER=0 NUM_ROBUST=0 USE_SCST=0 SS_K=0 LOGLEVEL=DEBUG MAX_EPOCHS=50
+make train_multimodal GID=0 EXP_NAME=XE FEATS="resnet c3d mfcc category" USE_CST=0 USE_MIXER=0 SCB_CAPTIONS=0 USE_RL=0 LOGLEVEL=DEBUG MAX_EPOCHS=50
 ```
 
 * CST on ground-truth data (CST_GT_None/WXE)
 
 ```bash
-make train_multimodal GID=0 MODEL_TYPE=concat EXP_NAME=WXE \
-FEATS="resnet c3d mfcc category" USE_SS_AFTER=0 USE_ROBUST=1 \
-USE_MIXER=0 NUM_ROBUST=0 MIXER_FROM=0 USE_SCST=1 SS_K=0 LOGLEVEL=DEBUG MAX_EPOCHS=50
+make train_multimodal GID=0 EXP_NAME=WXE FEATS="resnet c3d mfcc category" USE_CST=1 USE_MIXER=0 SCB_CAPTIONS=0 USE_RL=1 LOGLEVEL=DEBUG MAX_EPOCHS=50
 ```
 
 * CST on model sampled data using the greedy baseline (CST_MS_Greedy)
 
 ```bash
-make train_multimodal GID=0 MODEL_TYPE=concat EXP_NAME=CST_MS_Greedy \
-FEATS="resnet c3d mfcc category" USE_SS_AFTER=0 USE_ROBUST=0 NUM_ROBUST=0 \
-USE_MIXER=1 MIXER_FROM=1 USE_SCST=1 USE_EOS=1 LOGLEVEL=DEBUG MAX_EPOCHS=200 \
-START_FROM=output/model/cvpr2018_cstxe
+make train_multimodal GID=0 EXP_NAME=CST_MS_Greedy FEATS="resnet c3d mfcc category" USE_CST=0 SCB_CAPTIONS=0 USE_MIXER=1 MIXER_FROM=1 USE_RL=1 USE_EOS=1 LOGLEVEL=DEBUG MAX_EPOCHS=200 START_FROM=output/model/cvpr2018_cstxe
 ```
 
 * CST on model sampled data using the self-consensus baseline from the GT (CST_MS_SCB)
 
 ```
-make train_multimodal GID=0 MODEL_TYPE=concat EXP_NAME=CST_MS_SCB \
-FEATS="resnet c3d mfcc category" USE_SS_AFTER=0 USE_ROBUST=1 USE_MIXER=1 \
-MIXER_FROM=1 R_BASELINE=2 NUM_ROBUST=20 USE_SCST=1 USE_EOS=1 LOGLEVEL=DEBUG MAX_EPOCHS=200 \
-START_FROM=output/model/cvpr2018_cstxe
+make train_multimodal GID=0 EXP_NAME=CST_MS_SCB FEATS="resnet c3d mfcc category" USE_CST=1 USE_MIXER=1 MIXER_FROM=1 SCB_BASELINE=0 SCB_CAPTIONS=20 USE_RL=1 USE_EOS=1 LOGLEVEL=DEBUG MAX_EPOCHS=200 START_FROM=output/model/cvpr2018_cstxe
 ```
 
 * CST on model sampled data using the self-consensus baseline from the sampled sequences (CST_MS_SCB(*))
 
 ```
-make train_multimodal GID=0 MODEL_TYPE=concat EXP_NAME=CST_MS_SCBSTAR \
-FEATS="resnet c3d mfcc category" USE_SS_AFTER=0 USE_ROBUST=1 USE_MIXER=1 \
-MIXER_FROM=1 R_BASELINE=1 NUM_ROBUST=20 USE_SCST=1 USE_EOS=1 LOGLEVEL=DEBUG MAX_EPOCHS=200 \
-START_FROM=output/model/cvpr2018_cstxe
+make train_multimodal GID=0 MODEL_TYPE=concat EXP_NAME=CST_MS_SCBSTAR FEATS="resnet c3d mfcc category" USE_CST=1 USE_MIXER=1 MIXER_FROM=1 SCB_BASELINE=1 SCB_CAPTIONS=20 USE_RL=1 USE_EOS=1 LOGLEVEL=DEBUG MAX_EPOCHS=200 START_FROM=output/model/cvpr2018_cstxe
 ```
 
 ## Reference
