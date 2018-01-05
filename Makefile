@@ -11,7 +11,7 @@ MSRVTT2017_DIR=$(IN_DIR)/msrvtt2017
 YT2T_DIR=$(IN_DIR)/yt2t
 
 SPLITS=train val test
-DATASETS=yt2t msrvtt# msrvtt2017 tvvtt
+DATASETS=msrvtt# yt2t msrvtt2017 tvvtt
 
 WORD_COUNT_THRESHOLD?=3  # in output/metadata this threshold was 0; was 3 in output/metadata2017
 MAX_SEQ_LEN?=30          # in output/metadata seqlen was 20; was 30 in output/metadata2017
@@ -113,26 +113,16 @@ convert_datainfo2cocofmt: $(foreach s,$(SPLITS),$(patsubst %,$(META_DIR)/%_$(s)_
 %_cocofmt.json: %_datainfo.json 
 	python convert_datainfo2cocofmt.py $< $@ 
 
-### frameinfo
-get_dataset = $(word 1,$(subst _, ,$1))
-get_split = $(word 2,$(subst _, ,$1))
-create_frameinfo: $(foreach s,$(SPLITS),$(patsubst %,$(META_DIR)/%_$(s)_frameinfo.json,$(DATASETS)))
-%_frameinfo.json: %_datainfo.json 
-	python create_frameinfo.py $^ $@ \
-	       --dataset $(call get_dataset,$(notdir $@)) \
-	       --split $(call get_split,$(notdir $@)) \
-	       --input_dir $(IN_DIR) --img_type rgb
+### pre-compute document frequency for computing CIDEr of on model samples
+compute_ciderdf: $(foreach s,$(SPLITS),$(patsubst %,$(META_DIR)/%_$(s)_ciderdf.pkl,$(DATASETS)))
+%_ciderdf.pkl: %_proprocessedtokens.json
+	python compute_ciderdf.py $^ $@ --output_words --vocab_json $(firstword $(subst _, ,$@))_train_vocab.json 
 
-### create cached of document frequency for Cider computation
-prepro_ngrams: $(foreach s,$(SPLITS),$(patsubst %,$(META_DIR)/%_$(s)_cidercache.pkl,$(DATASETS)))
-.SECONDEXPANSION:
-%_cidercache.pkl: $$(firstword $$(subst _, ,$$@))_train_vocab.json %_proprocessedtokens.json
-	python prepro_ngrams.py $^ $@ --output_words
+### pre-compute evaluation scores (BLEU_4, CIDEr, METEOR, ROUGE_L)
+compute_evalscores: $(patsubst %,$(META_DIR)/$(TRAIN_DATASET)_%_evalscores.pkl,$(SPLITS))
+%_evalscores.pkl: %_cocofmt.json
+	python compute_scores.py $^ $@ --remove_in_ref 
 
-# newer version: use vocab of all words, rather than with word freq > 3
-prepro_cidercache: $(foreach s,$(SPLITS),$(patsubst %,$(META_DIR)/%_$(s)_cidercacheall.pkl,$(DATASETS)))
-%_cidercacheall.pkl: %_proprocessedtokens.json
-	python prepro_ngrams.py $^ $@ --output_words
 #####################################################################################################################
 
 noop=
@@ -143,7 +133,7 @@ TRAIN_OPT=--beam_size $(BEAM_SIZE) --max_patience $(MAX_PATIENCE) --eval_metric 
 	--train_seq_per_img $(TRAIN_SEQ_PER_IMG) --test_seq_per_img $(TEST_SEQ_PER_IMG) \
 	--batch_size $(BATCH_SIZE) --test_batch_size $(BATCH_SIZE) --learning_rate $(LEARNING_RATE) --lr_update $(LR_UPDATE) \
 	--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) \
-	--train_cached_tokens $(META_DIR)/$(TRAIN_DATASET)_train_cidercache.pkl \
+	--train_cached_tokens $(META_DIR)/$(TRAIN_DATASET)_train_ciderdf.pkl \
 	--use_ss $(USE_SS) --ss_k $(SS_K) --use_scst_after $(USE_SS_AFTER) --ss_max_prob $(SS_MAX_PROB) \
 	--use_scst $(USE_SCST) --use_mixer $(USE_MIXER) --mixer_from $(MIXER_FROM) \
 	--use_robust $(USE_ROBUST) --num_robust $(NUM_ROBUST) --use_robust_baseline $(R_BASELINE) \
@@ -237,42 +227,6 @@ $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID)_test.jso
 		--test_feat_h5 $(patsubst %,$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))\
 		$(TEST_OPT)
 
-
-compute_ciderscores: $(patsubst %,$(META_DIR)/$(TRAIN_DATASET)_%_ciderscores.pkl,$(SPLITS))
-%_ciderscores.pkl: %_cocofmt.json
-	python compute_cider.py $^ $@
-
-compute_evalscores: $(patsubst %,$(META_DIR)/$(TRAIN_DATASET)_%_refinscores.pkl,$(SPLITS))
-%_refinscores.pkl: %_cocofmt.json
-	python compute_scores.py $^ $@ 
-
-compute_dataslice:
-	python compute_dataslice.py \
-		$(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID)_test.json \
-		$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
-		$(META_DIR)/$(TRAIN_DATASET)_test_ciderscores.pkl cst_rl_scb.txt
-
-compute_dataslice_cvpr2018: $(patsubst %,$(MODEL_DIR)/cvpr2018_results/%_dataslice.txt,XE CST_GT_None CST_MS_Greedy CST_MS_HCB CST_MS_MCB SCST)
-%_dataslice.txt: %_test.json $(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
-       $(META_DIR)/$(TRAIN_DATASET)_test_ciderscores.pkl 
-	python compute_dataslice.py $^ $@
-
-compute_dataslice_logp: $(patsubst %,$(MODEL_DIR)/cvpr2018_results/%_dataslice_logp.txt,XE CST_GT_None CST_GT_R CST_GT_HCB CST_MS_HCB CST_MS_MCB CST_MS_Greedy)
-%_dataslice_logp.txt: %_test.json %_avglogps.pkl 
-	python compute_dataslice_logp.py $^ $@
-
-compute_ciderd:
-	python compute_ciderd.py \
-		$(MODEL_DIR)/xe_robust_r0/resnetc3dmfcccategory_msrvtt_concat_CIDEr_64_0.0001_test.json \
-		$(META_DIR)/$(TRAIN_DATASET)_test_cidercacheall_words.pkl \
-		$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json 
-	
-compute_pred_cider: $(patsubst %,$(MODEL_DIR)/cvpr2018_results2/%_testupdate.json,XE CST_GT_None CST_MS_HCB CST_MS_MCB)
-%_testupdate.json: $(META_DIR)/$(TRAIN_DATASET)_test_cocofmt.json\
-       	$(META_DIR)/$(TRAIN_DATASET)_test_evalscores.pkl \
-	%_test.json \
-	$(META_DIR)/$(TRAIN_DATASET)_test_cidercacheall_words.pkl 
-	python compute_prediction_scores.py $^ $@
 
 # You can use the wildcard with .PRECIOUS.
 .PRECIOUS: %.pth

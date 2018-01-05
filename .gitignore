@@ -8,6 +8,7 @@ input
 output
 log
 png
+cider
 coco-caption
 old
 .ipynb_checkpoints
