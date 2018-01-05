@@ -23,7 +23,7 @@ this will run `standalize_datainfo` `preprocess_datainfo` `build_vocab` `create_
 
 Create cached of document frequency for CIDEr computation
 ```bash
-make prepro_cidercache
+make compute_ciderdf
 ```
 
 Pre-compute evaluation scores (BLEU_4, CIDEr, METEOR, ROUGE_L) for each caption
