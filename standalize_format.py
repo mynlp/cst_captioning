@@ -186,6 +186,9 @@ if __name__ == "__main__":
     else:
         raise ValueError('Unknow dataset: %s', args.dataset)
 
+    if not os.path.exists(os.path.dirname(args.output_json)):
+        os.makedirs(os.path.dirname(args.output_json))
+        
     with open(args.output_json, 'w') as of:
         json.dump(out, of)
 
