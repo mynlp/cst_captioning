@@ -108,7 +108,7 @@ def train(
             
         if opt.use_rl == 1 and infos[
                 'epoch'] >= opt.use_rl_after and not rl_training:
-            logger.info('Start training using RL objective...')
+            logger.info('Using RL objective...')
             rl_training = True
             bcmr_scorer = {
                 'Bleu_4': Bleu(),
@@ -254,7 +254,7 @@ def train(
                 log_info += [('ss_prob', opt.ss_prob)]
                 
             if opt.use_mixer == 1:
-                log_info += [('mixer', mixer_from)]    
+                log_info += [('mixer_from', mixer_from)]    
                 
             if opt.use_cst == 1:
                 log_info += [('scb_captions', scb_captions)]
@@ -445,7 +445,7 @@ def check_model(model, opt, infos, infos_history):
 if __name__ == '__main__':
 
     opt = opts.parse_opts()
-
+    
     logging.basicConfig(level=getattr(logging, opt.loglevel.upper()),
                         format='%(asctime)s:%(levelname)s: %(message)s')
 
@@ -533,7 +533,7 @@ if __name__ == '__main__':
 
     logger.info('Training time: %s', datetime.now() - start)
 
-    if opt.result_file is not None:
+    if opt.result_file:
         logger.info('Start testing...')
         start = datetime.now()
 

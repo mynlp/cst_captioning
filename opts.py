@@ -252,13 +252,14 @@ def parse_opts():
     parser.add_argument(
         '--model_type',
         type=str,
-        default='standard',
+        default='concat',
         choices=[
             'standard',
             'concat',
             'manet',
-            'scst'],
+            ],
         help='Type of models')
+    
     parser.add_argument(
         '--beam_size',
         type=int,
@@ -295,12 +296,14 @@ def parse_opts():
         '--mixer_from',
         type=int,
         default=-1,
-        help='If -1, then an annealing scheme will be used, based on mixer_increase_every')
+        help='If -1, then an annealing scheme will be used, based on mixer_descrease_every.\
+        Initially it will set to the max_seq_length (30), and will be gradually descreased to 1.\
+        If this value is set to 1 from the begininig, then the MIXER approach is not applied')
     parser.add_argument(
         '--mixer_increase_every',
         type=int,
         default=2,
-        help='Epoch interval to increase mixing value')
+        help='Epoch interval to descrease mixing value')
     parser.add_argument(
         '--use_cst',
         type=int,

@@ -401,6 +401,9 @@ class CaptionModel(nn.Module):
             [_.unsqueeze(1) for _ in seqLogprobs], 1)
 
     def sample_beam(self, feats, opt={}):
+        """
+        modified from https://github.com/ruotianluo/self-critical.pytorch
+        """
         beam_size = opt.get('beam_size', 5)
         fc_feats = self.feat_pool(feats)
         batch_size = fc_feats.size(0)

@@ -145,46 +145,7 @@ TEST_OPT=--beam_size $(BEAM_SIZE) \
 	--output_logp 1 \
 	--result_file $@
 
-train: $(patsubst %,$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth,$(FEATS))
-$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth: \
-	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
-	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_sequencelabel.h5 \
-	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_sequencelabel.h5 \
-	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_cocofmt.json \
-	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_cocofmt.json \
-	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
-	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_evalscores.pkl \
-    $(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_%_mp$(NUM_CHUNKS).h5 \
-	$(FEAT_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_%_mp$(NUM_CHUNKS).h5 \
-	$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5 
-	mkdir -p $(MODEL_DIR)/$(EXP_NAME)
-	CUDA_VISIBLE_DEVICES=$(GID) python train.py \
-		--train_label_h5 $(word 1,$^) \
-		--val_label_h5 $(word 2,$^) \
-		--test_label_h5 $(word 3,$^) \
-		--train_cocofmt_file $(word 4,$^) \
-		--val_cocofmt_file $(word 5,$^) \
-		--test_cocofmt_file $(word 6,$^) \
-		--train_bcmrscores_pkl $(word 7,$^) \
-		--train_feat_h5 $(word 8,$^) \
-		--val_feat_h5 $(word 9,$^) \
-		--test_feat_h5 $(word 10,$^)
-		$(TRAIN_OPT)
-
-test: $(patsubst %,$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID)_test.json,$(FEATS))
-$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID)_test.json: \
-	$(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth \
-	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_sequencelabel.h5 \
-	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
-	$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5
-	CUDA_VISIBLE_DEVICES=$(GID) python test.py \
-		--model_file $(word 1,$^) \
-		--test_label_h5 $(word 2,$^) \
-		--test_cocofmt_file $(word 3,$^) \
-		--test_feat_h5 $(word 4,$^) \
-		$(TEST_OPT)
-
-train_multimodal: $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth
+train: $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth
 $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth: \
 	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_sequencelabel.h5 \
 	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_sequencelabel.h5 \
@@ -210,7 +171,7 @@ $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth: \
 		--test_feat_h5 $(patsubst %,$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))\
 		$(TRAIN_OPT)
 
-test_multimodal: $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID)_test.json
+test: $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID)_test.json
 $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID)_test.json: \
 	$(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth \
 	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_sequencelabel.h5 \
