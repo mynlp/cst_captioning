@@ -33,44 +33,39 @@ make compute_evalscores
 
 ## Train/Test ###
 
-* Train/test single model
 ```bash
 make train [options]
 make test [options]
 ```
-* Train/test fusion model (multimodal features)
-```bash
-make train_multimodal [options]
-make test_multimodal [options]
-```
 
-Please refer to the Makefile and the opts.py file for the set of available train/test options
+Please refer to the Makefile (and opts.py file) for the set of available train/test options
 
 ## Examples of using make rules for training:
-* Cross-entropy Training (XE)
+
+Train XE model
 ```bash
-make train_multimodal GID=0 EXP_NAME=XE FEATS="resnet c3d mfcc category" USE_CST=0 USE_MIXER=0 SCB_CAPTIONS=0 USE_RL=0 LOGLEVEL=DEBUG MAX_EPOCHS=50
+make train_multimodal GID=0 EXP_NAME=xe FEATS="resnet c3d mfcc category" USE_CST=0 USE_MIXER=0 SCB_CAPTIONS=0 USE_RL=0 LOGLEVEL=DEBUG MAX_EPOCHS=50
 ```
 
-* CST on ground-truth data (CST_GT_None/WXE)
+Train CST_GT_None/WXE model
 
 ```bash
 make train_multimodal GID=0 EXP_NAME=WXE FEATS="resnet c3d mfcc category" USE_CST=1 USE_MIXER=0 SCB_CAPTIONS=0 USE_RL=1 LOGLEVEL=DEBUG MAX_EPOCHS=50
 ```
 
-* CST on model sampled data using the greedy baseline (CST_MS_Greedy)
+Train CST_MS_Greedy model (using greedy baseline)
 
 ```bash
-make train_multimodal GID=0 EXP_NAME=CST_MS_Greedy FEATS="resnet c3d mfcc category" USE_CST=0 SCB_CAPTIONS=0 USE_MIXER=1 MIXER_FROM=1 USE_RL=1 USE_EOS=1 LOGLEVEL=DEBUG MAX_EPOCHS=200 START_FROM=output/model/cvpr2018_cstxe
+make train_multimodal GID=0 EXP_NAME=CST_MS_Greedy FEATS="resnet c3d mfcc category" USE_CST=0 SCB_CAPTIONS=0 USE_MIXER=1 MIXER_FROM=1 USE_RL=1 USE_EOS=1 LOGLEVEL=DEBUG MAX_EPOCHS=200 START_FROM=output/model/WXE
 ```
 
-* CST on model sampled data using the self-consensus baseline from the GT (CST_MS_SCB)
+Train CST_MS_SCB model (using SCB baseline, where SCB is computed from GT captions)
 
 ```
-make train_multimodal GID=0 EXP_NAME=CST_MS_SCB FEATS="resnet c3d mfcc category" USE_CST=1 USE_MIXER=1 MIXER_FROM=1 SCB_BASELINE=0 SCB_CAPTIONS=20 USE_RL=1 USE_EOS=1 LOGLEVEL=DEBUG MAX_EPOCHS=200 START_FROM=output/model/cvpr2018_cstxe
+make train_multimodal GID=0 EXP_NAME=CST_MS_SCB FEATS="resnet c3d mfcc category" USE_CST=1 USE_MIXER=1 MIXER_FROM=1 SCB_BASELINE=0 SCB_CAPTIONS=20 USE_RL=1 USE_EOS=1 LOGLEVEL=DEBUG MAX_EPOCHS=200 START_FROM=output/model/WXE
 ```
 
-* CST on model sampled data using the self-consensus baseline from the sampled sequences (CST_MS_SCB(*))
+Train CST_MS_SCB(*) model (using SCB baseline, where SCB is computed from model sampled captions)
 
 ```
 make train_multimodal GID=0 MODEL_TYPE=concat EXP_NAME=CST_MS_SCBSTAR FEATS="resnet c3d mfcc category" USE_CST=1 USE_MIXER=1 MIXER_FROM=1 SCB_BASELINE=1 SCB_CAPTIONS=20 USE_RL=1 USE_EOS=1 LOGLEVEL=DEBUG MAX_EPOCHS=200 START_FROM=output/model/cvpr2018_cstxe
@@ -88,9 +83,6 @@ make train_multimodal GID=0 MODEL_TYPE=concat EXP_NAME=CST_MS_SCBSTAR FEATS="res
 ## TODO 
 
 * Test on Youtube2Text dataset (different number of captions per video)
-* Clean code
-* Share features
-* Support training on multi GPUs
 
 ### Acknowledgements ###
 
