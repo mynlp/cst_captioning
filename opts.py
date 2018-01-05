@@ -162,12 +162,12 @@ def parse_opts():
         help='how often to save a model checkpoint in epochs?')
 
     parser.add_argument(
-        '--use_scst',
+        '--use_rl',
         type=int,
         default=0,
         help='Use scst training')
     parser.add_argument(
-        '--use_scst_after',
+        '--use_rl_after',
         type=int,
         default=30,
         help='Start scst training after this epoch')
@@ -302,35 +302,35 @@ def parse_opts():
         default=2,
         help='Epoch interval to increase mixing value')
     parser.add_argument(
-        '--use_robust',
+        '--use_cst',
         type=int,
         default=0,
-        help='Use schedule sampling')
+        help='Use cst training')
     parser.add_argument(
-        '--use_robust_after',
+        '--use_cst_after',
         type=int,
         default=0,
-        help='Start robust training after this epoch')
+        help='Start cst training after this epoch')
     parser.add_argument(
-        '--robust_increase_every',
+        '--cst_increase_every',
         type=int,
         default=5,
-        help='Epoch interval to increase robustness')
+        help='Epoch interval to increase cst baseline')
     parser.add_argument(
-        '--num_robust',
-        type=int,
-        default=-1,
-        help='-1: annealing, otherwise using this fixed number to be the number of caption to be removed')
-    parser.add_argument(
-        '--use_robust_baseline',
+        '--scb_baseline',
         type=int,
         default=1,
-        help='Use schedule sampling')
+        help='which Self-consensus baseline (SCB) to use? 0: GT, 1: MS')
+    parser.add_argument(
+        '--scb_captions',
+        type=int,
+        default=20,
+        help='-1: annealing, otherwise using this fixed number to be the number of captions to compute SCB')
     parser.add_argument(
         '--use_eos',
         type=int,
         default=0,
-        help='Use schedule sampling')
+        help='If 1, keep <EOS> in captions of the reference set')
     parser.add_argument(
         '--output_logp',
         type=int,

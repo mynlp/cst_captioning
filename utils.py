@@ -223,22 +223,19 @@ def get_self_critical_reward(
     return rewards, m_score, g_score
 
 
-def get_robust_critical_reward(
+def get_cst_reward(
         model_res,
         data_gts,
         bcmr_scorer,
         bcmrscores=None,
         expand_feat=0,
         seq_per_img=20,
-        num_robust=0,
-        use_robust_baseline=1,
+        scb_captions=20,
+        scb_baseline=1,
         use_eos=0,
         use_mixer=0):
     
     """
-    Args:
-        num_robust: number of sentences to be removed
-        use_baseline: use removed captions as baseline or not
         
     """
     
@@ -283,7 +280,7 @@ def get_robust_critical_reward(
     else:
         raise ValueError('bcmrscores is not set!')
         
-    if num_robust > 0:
+    if scb_captions > 0:
         # use removed sentences as baseline
         # have tried the average baseline,
         # but it seems to not work well
@@ -291,29 +288,31 @@ def get_robust_critical_reward(
         
         sorted_scores = np.sort(scores, axis=1)
         
-        if use_robust_baseline != 1:
+        if scb_baseline == 1:
+            # compute baseline from sampled scores
+            m_score = np.mean(sorted_scores[:,scb_captions:])
+            b_score = np.mean(sorted_scores[:,:scb_captions])
+        else:
+            # compute baseline from GT scores
             sorted_bcmrscores = np.sort(bcmrscores, axis=1)
             m_score = np.mean(scores)
             b_score = np.mean(bcmrscores)
-        else:
-            m_score = np.mean(sorted_scores[:,num_robust:])
-            b_score = np.mean(sorted_scores[:,:num_robust])
         
         for ii in range(scores.shape[0]):
-            if use_robust_baseline == 1:
+            if scb_baseline == 1:
                 # note: may need to reculate b, use the max value, 
                 # rathan the average, as in the else statement
                 # update: have tried the max value
                 # however, it does not work
-                b = np.mean(sorted_scores[ii,:num_robust])
+                b = np.mean(sorted_scores[ii,:scb_captions])
                 scores[ii] = scores[ii] - b
             else:
                 # to turn off backprobs
                 # however, negative scores may be also be helpful to learn
-                # b = sorted_scores[ii, num_robust]
+                # b = sorted_scores[ii, scb_captions]
                 #scores[ii] = max(scores[ii] - b, 0)
                 #scores[ii][scores[ii]<=b] = 0
-                b = np.mean(sorted_bcmrscores[ii,:num_robust])
+                b = np.mean(sorted_bcmrscores[ii,:scb_captions])
                 scores[ii] = scores[ii] - b
                 
     else:

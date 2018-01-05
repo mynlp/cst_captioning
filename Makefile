@@ -36,7 +36,6 @@ RNN_SIZE?=512
 PRINT_INTERVAL?=20
 MAX_PATIENCE?=5 # FOR EARLY STOPPING
 SAVE_CHECKPOINT_FROM?=1
-FEAT_SET=c3d
 
 MAX_EPOCHS?=200
 NUM_CHUNKS?=1
@@ -53,13 +52,13 @@ MODEL_TYPE?=concat
 POOLING?=mp
 CAT_TYPE=glove
 LOGLEVEL?=INFO
-USE_SS?=0
-USE_SS_AFTER?=5
+
 SS_MAX_PROB?=0.25
-USE_ROBUST?=0
-NUM_ROBUST?=-1
-R_BASELINE?=1
-USE_SCST?=0
+USE_CST?=0
+SCB_CAPTIONS?=20
+SCB_BASELINE?=1
+USE_RL?=0
+USE_RL_AFTER?=0
 USE_EOS?=0
 USE_MIXER?=0
 MIXER_FROM?=-1
@@ -70,10 +69,7 @@ FEAT1?=resnet
 FEAT2?=c3d
 FEAT3?=mfcc
 FEAT4?=category
-FEAT5?=vgg16
-FEAT6?=vgg19
 
-#FEATS=$(FEAT1) $(FEAT2) $(FEAT3) $(FEAT5) $(FEAT6)
 FEATS?=$(FEAT1) $(FEAT2) $(FEAT3) $(FEAT4)
 
 TRAIN_ID=$(TRAIN_DATASET)_$(MODEL_TYPE)_$(EVAL_METRIC)_$(BATCH_SIZE)_$(LEARNING_RATE)
@@ -134,9 +130,9 @@ TRAIN_OPT=--beam_size $(BEAM_SIZE) --max_patience $(MAX_PATIENCE) --eval_metric 
 	--batch_size $(BATCH_SIZE) --test_batch_size $(BATCH_SIZE) --learning_rate $(LEARNING_RATE) --lr_update $(LR_UPDATE) \
 	--save_checkpoint_from $(SAVE_CHECKPOINT_FROM) --num_chunks $(NUM_CHUNKS) \
 	--train_cached_tokens $(META_DIR)/$(TRAIN_DATASET)_train_ciderdf.pkl \
-	--use_ss $(USE_SS) --ss_k $(SS_K) --use_scst_after $(USE_SS_AFTER) --ss_max_prob $(SS_MAX_PROB) \
-	--use_scst $(USE_SCST) --use_mixer $(USE_MIXER) --mixer_from $(MIXER_FROM) \
-	--use_robust $(USE_ROBUST) --num_robust $(NUM_ROBUST) --use_robust_baseline $(R_BASELINE) \
+	--ss_k $(SS_K) --use_rl_after $(USE_RL_AFTER) --ss_max_prob $(SS_MAX_PROB) \
+	--use_rl $(USE_RL) --use_mixer $(USE_MIXER) --mixer_from $(MIXER_FROM) \
+	--use_cst $(USE_CST) --scb_captions $(SCB_CAPTIONS) --scb_baseline $(SCB_BASELINE) \
 	--loglevel $(LOGLEVEL) --model_type $(MODEL_TYPE) --use_eos $(USE_EOS) \
 	--model_file $@ --start_from $(START_FROM) --result_file $(basename $@)_test.json \
 	2>&1 | tee $(basename $@).log
@@ -157,8 +153,8 @@ $(MODEL_DIR)/$(EXP_NAME)/%_$(TRAIN_ID).pth: \
 	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_cocofmt.json \
 	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_cocofmt.json \
 	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
-	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_ciderscores.pkl \
-        $(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_%_mp$(NUM_CHUNKS).h5 \
+	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_evalscores.pkl \
+    $(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_%_mp$(NUM_CHUNKS).h5 \
 	$(FEAT_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_%_mp$(NUM_CHUNKS).h5 \
 	$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5 
 	mkdir -p $(MODEL_DIR)/$(EXP_NAME)
@@ -196,8 +192,8 @@ $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth: \
 	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_cocofmt.json \
 	$(META_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_cocofmt.json \
 	$(META_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_cocofmt.json \
-	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_ciderscores.pkl \
-        $(patsubst %,$(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS)) \
+	$(META_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_evalscores.pkl \
+    $(patsubst %,$(FEAT_DIR)/$(TRAIN_DATASET)_$(TRAIN_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS)) \
 	$(patsubst %,$(FEAT_DIR)/$(VAL_DATASET)_$(VAL_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS)) \
 	$(patsubst %,$(FEAT_DIR)/$(TEST_DATASET)_$(TEST_SPLIT)_%_mp$(NUM_CHUNKS).h5,$(FEATS))
 	mkdir -p $(MODEL_DIR)/$(EXP_NAME)

@@ -62,7 +62,7 @@ def train(
              }
 
     checkpoint_checked = False
-    scst_training = False
+    rl_training = False
     seq_per_img = train_loader.get_seq_per_img()     
     infos_history = {}
     
@@ -80,9 +80,9 @@ def train(
         infos['start_epoch'] = infos['epoch']
         checkpoint_checked = True # this epoch is already checked
         
-    if opt.use_scst == 1 and opt.use_scst_after == 0:
-        opt.use_scst_after = infos['epoch']
-        opt.use_robust_after = infos['epoch']
+    if opt.use_rl == 1 and opt.use_rl_after == 0:
+        opt.use_rl_after = infos['epoch']
+        opt.use_cst_after = infos['epoch']
         train_loader.set_current_epoch(infos['epoch'])
 
     while True:
@@ -98,6 +98,7 @@ def train(
             labels = labels.cuda()
             masks = masks.cuda()
 
+        # implement scheduled sampling
         opt.ss_prob = 0
         if opt.use_ss == 1 and infos['epoch'] >= opt.use_ss_after:
             annealing_prob = opt.ss_k / \
@@ -105,10 +106,10 @@ def train(
             opt.ss_prob = min(1 - annealing_prob, opt.ss_max_prob)
             model.set_ss_prob(opt.ss_prob)
             
-        if opt.use_scst == 1 and infos[
-                'epoch'] >= opt.use_scst_after and not scst_training:
-            logger.info('Start training using SCST objective...')
-            scst_training = True
+        if opt.use_rl == 1 and infos[
+                'epoch'] >= opt.use_rl_after and not rl_training:
+            logger.info('Start training using RL objective...')
+            rl_training = True
             bcmr_scorer = {
                 'Bleu_4': Bleu(),
                 'CIDEr': CiderD(df=opt.train_cached_tokens),
@@ -120,40 +121,40 @@ def train(
             #gt_refs = utils.load_gt_refs(train_loader.cocofmt_file)
 
         mixer_from = opt.mixer_from
-        if opt.use_mixer == 1 and scst_training:
+        if opt.use_mixer == 1 and rl_training:
             #annealing_mixer = opt.ss_k / \
-            #    (opt.ss_k + np.exp((infos['epoch'] - opt.use_scst_after) / opt.ss_k))
+            #    (opt.ss_k + np.exp((infos['epoch'] - opt.use_rl_after) / opt.ss_k))
             #annealing_mixer = int(round(annealing_mixer * opt.seq_length))
             
             # -1 for annealing
             if opt.mixer_from == -1:
-                annealing_mixer = opt.seq_length - int(np.ceil((infos['epoch']-opt.use_scst_after+1)/float(opt.mixer_increase_every)))
+                annealing_mixer = opt.seq_length - int(np.ceil((infos['epoch']-opt.use_rl_after+1)/float(opt.mixer_increase_every)))
                 mixer_from = max(1, annealing_mixer)
                 
             model.set_mixer_from(mixer_from)
         
-        num_robust = opt.num_robust
-        if opt.use_robust == 1 and scst_training:
-            # if opt.use_robust == 1 and opt.ss_k == 0,
-            # then do not using annealing, but the fixed num_robust provided
+        scb_captions = opt.scb_captions
+        if opt.use_cst == 1 and rl_training:
+            # if opt.use_cst == 1 and opt.ss_k == 0,
+            # then do not using annealing, but the fixed scb_captions provided
             #annealing_robust = opt.ss_k / \
-            #    (opt.ss_k + np.exp((infos['epoch'] - opt.use_scst_after) / opt.ss_k))
+            #    (opt.ss_k + np.exp((infos['epoch'] - opt.use_rl_after) / opt.ss_k))
             #annealing_robust = int(round((1 - annealing_robust) * seq_per_img))
             
             # do not use robust before fully mixed
             # if opt.use_mixer == 1 and mixer_from > 1:
-            #    opt.use_robust_after = infos['epoch']
+            #    opt.use_cst_after = infos['epoch']
                 
-            # if opt.num_robust is -1, then use the annealing value, 
+            # if opt.scb_captions is -1, then use the annealing value, 
             # otherwise, use the set value
-            if opt.num_robust == -1:
-                annealing_robust = int(np.ceil((infos['epoch']-opt.use_robust_after+1)/float(opt.robust_increase_every)))
-                num_robust = min(annealing_robust, seq_per_img-1)
+            if opt.scb_captions == -1:
+                annealing_robust = int(np.ceil((infos['epoch']-opt.use_cst_after+1)/float(opt.cst_increase_every)))
+                scb_captions = min(annealing_robust, seq_per_img-1)
             
         optimizer.zero_grad()
         model.set_seq_per_img(seq_per_img)
 
-        if scst_training:
+        if rl_training:
             # sampling from model distribution
             # model_res, logprobs = model.sample(
             #    feats, {'sample_max': 0, 'expand_feat': opt.expand_feat, 'temperature': 1})
@@ -161,13 +162,13 @@ def train(
             # using mixer
             pred, model_res, logprobs = model(feats, labels)
             
-            if opt.use_robust == 0:
-                # greedy decoding baseline
+            if opt.use_cst == 0:
+                # greedy decoding baseline in SCST paper
                 greedy_baseline, _ = model.sample([Variable(f.data, volatile=True) for f in feats],
                                            {'sample_max': 1, 'expand_feat': opt.expand_feat})
 
             """
-            if opt.loglevel.upper() == 'DEBUG' and opt.use_robust == 0:
+            if opt.loglevel.upper() == 'DEBUG' and opt.use_cst == 0:
                 model_sents = utils.decode_sequence(opt.vocab, model_res)
                 baseline_sents = utils.decode_sequence(opt.vocab, greedy_baseline)
                 for jj, sent in enumerate(zip(model_sents, baseline_sents)):
@@ -181,18 +182,19 @@ def train(
                         (jj, video_id, sent[0], sent[1]))
             """
  
-            if opt.use_robust == 1:
+            if opt.use_cst == 1:
                 bcmrscores = data['bcmrscores']    
-                reward, m_score, g_score = utils.get_robust_critical_reward(model_res, data['gts'], bcmr_scorer,
+                reward, m_score, g_score = utils.get_cst_reward(model_res, data['gts'], bcmr_scorer,
                                                                             bcmrscores=bcmrscores,
-                                                                          expand_feat=opt.expand_feat,
-                                                                          seq_per_img=train_loader.get_seq_per_img(),
-                                                                          num_robust=num_robust,
-                                                                          use_robust_baseline=opt.use_robust_baseline,
+                                                                            expand_feat=opt.expand_feat,
+                                                                            seq_per_img=train_loader.get_seq_per_img(),
+                                                                            scb_captions=scb_captions,
+                                                                            scb_baseline=opt.scb_baseline,
                                                                             use_eos=opt.use_eos,
                                                                             use_mixer=opt.use_mixer
                                                                          )
             else:
+                # use greedy baseline by default, compute self-critical reward
                 reward, m_score, g_score = utils.get_self_critical_reward(model_res, greedy_baseline, data['gts'], bcmr_scorer,
                                                                           expand_feat=opt.expand_feat,
                                                                           seq_per_img=train_loader.get_seq_per_img(),
@@ -234,7 +236,7 @@ def train(
         optimizer.step()
         infos['TrainLoss'] = loss.data[0]
         infos['mixer_from'] = mixer_from
-        infos['num_robust'] = num_robust
+        infos['scb_captions'] = scb_captions
         
         if infos['iter'] % opt.print_log_interval == 0:
             elapsed_time = time.time() - t_start
@@ -243,7 +245,7 @@ def train(
                         ('Iter', infos['iter']),
                         ('Loss', infos['TrainLoss'])]
 
-            if scst_training and opt.use_scst == 1:
+            if rl_training:
                 log_info += [('Reward', np.mean(reward[:, 0])),
                              ('{} (m)'.format(opt.eval_metric), m_score),
                              ('{} (b)'.format(opt.eval_metric), g_score)]
@@ -254,8 +256,8 @@ def train(
             if opt.use_mixer == 1:
                 log_info += [('mixer', mixer_from)]    
                 
-            if opt.use_robust == 1:
-                log_info += [('robust', num_robust)]
+            if opt.use_cst == 1:
+                log_info += [('scb_captions', scb_captions)]
                 
             log_info += [('Time', elapsed_time)]
             logger.info('%s', '\t'.join(
