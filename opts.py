@@ -165,12 +165,12 @@ def parse_opts():
         '--use_rl',
         type=int,
         default=0,
-        help='Use scst training')
+        help='Use RL training or not')
     parser.add_argument(
         '--use_rl_after',
         type=int,
         default=30,
-        help='Start scst training after this epoch')
+        help='Start RL training after this epoch')
     parser.add_argument(
         '--train_cached_tokens',
         type=str,
@@ -275,7 +275,7 @@ def parse_opts():
         '--use_ss_after',
         type=int,
         default=0,
-        help='Use schedule sampling')
+        help='Use schedule sampling after this epoch')
     parser.add_argument(
         '--ss_max_prob',
         type=float,
@@ -300,7 +300,7 @@ def parse_opts():
         Initially it will set to the max_seq_length (30), and will be gradually descreased to 1.\
         If this value is set to 1 from the begininig, then the MIXER approach is not applied')
     parser.add_argument(
-        '--mixer_increase_every',
+        '--mixer_descrease_every',
         type=int,
         default=2,
         help='Epoch interval to descrease mixing value')
@@ -323,7 +323,7 @@ def parse_opts():
         '--scb_baseline',
         type=int,
         default=1,
-        help='which Self-consensus baseline (SCB) to use? 0: GT, 1: MS')
+        help='which Self-consensus baseline (SCB) to use? 1: GT SCB, 2: Model Sample SCB')
     parser.add_argument(
         '--scb_captions',
         type=int,

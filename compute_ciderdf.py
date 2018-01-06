@@ -98,7 +98,7 @@ def main(vocab_json, captions_json, output_pkl, save_words=False):
     logger.info('Loading: %s', captions_json)
     videos = json.load(open(captions_json))
 
-    if vocab_json is not None:
+    if vocab_json and os.path.isfile(vocab_json):
         logger.info('Loading vocab: %s', vocab_json)
         vocab = json.load(open(vocab_json))
     else:
@@ -112,9 +112,9 @@ def main(vocab_json, captions_json, output_pkl, save_words=False):
     for v in videos:
         v['final_captions'] = []
         for txt in v['processed_tokens']:
-            #caption = [__BOS_TOKEN]
+            caption = [__BOS_TOKEN]
             caption = [w if w in wtoi else __UNK_TOKEN for w in txt]
-            #caption += [__EOS_TOKEN]
+            caption += [__EOS_TOKEN]
             v['final_captions'].append(caption)
 
     ngram_words, ngram_idxs, ref_len = build_dict(videos, wtoi)

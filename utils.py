@@ -236,7 +236,10 @@ def get_cst_reward(
         use_mixer=0):
     
     """
-        
+    Arguments:
+        bcmrscores: precomputed scores of GT sequences
+        scb_baseline: 1 - use GT to compute baseline, 
+                      2 - use MS to compute baseline
     """
     
     if bcmrscores is None or use_mixer == 1:
@@ -281,39 +284,29 @@ def get_cst_reward(
         raise ValueError('bcmrscores is not set!')
         
     if scb_captions > 0:
-        # use removed sentences as baseline
-        # have tried the average baseline,
-        # but it seems to not work well
-        # so an annealing schedule is necessary
         
         sorted_scores = np.sort(scores, axis=1)
         
         if scb_baseline == 1:
-            # compute baseline from sampled scores
-            m_score = np.mean(sorted_scores[:,scb_captions:])
-            b_score = np.mean(sorted_scores[:,:scb_captions])
-        else:
             # compute baseline from GT scores
             sorted_bcmrscores = np.sort(bcmrscores, axis=1)
             m_score = np.mean(scores)
             b_score = np.mean(bcmrscores)
+        elif scb_baseline == 2:
+            # compute baseline from sampled scores
+            m_score = np.mean(sorted_scores)
+            b_score = np.mean(sorted_scores[:,:scb_captions])
+        else:
+            raise ValueError('unknown scb_baseline!')
         
         for ii in range(scores.shape[0]):
             if scb_baseline == 1:
-                # note: may need to reculate b, use the max value, 
-                # rathan the average, as in the else statement
-                # update: have tried the max value
-                # however, it does not work
-                b = np.mean(sorted_scores[ii,:scb_captions])
-                scores[ii] = scores[ii] - b
-            else:
-                # to turn off backprobs
-                # however, negative scores may be also be helpful to learn
-                # b = sorted_scores[ii, scb_captions]
-                #scores[ii] = max(scores[ii] - b, 0)
-                #scores[ii][scores[ii]<=b] = 0
                 b = np.mean(sorted_bcmrscores[ii,:scb_captions])
-                scores[ii] = scores[ii] - b
+            elif scb_baseline == 2:
+                b = np.mean(sorted_scores[ii,:scb_captions])
+            else:
+                b = 0
+            scores[ii] = scores[ii] - b
                 
     else:
         m_score = np.mean(scores)

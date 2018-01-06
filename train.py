@@ -66,8 +66,9 @@ def train(
     seq_per_img = train_loader.get_seq_per_img()     
     infos_history = {}
     
-    if os.path.isfile(opt.start_from) or os.path.isdir(opt.start_from):
+    if os.path.exists(opt.start_from):
         if os.path.isdir(opt.start_from):
+            # loading the same model file at a different experiment dir
             start_from_file = os.path.join(
                 opt.start_from, os.path.basename(
                     opt.model_file))
@@ -79,6 +80,8 @@ def train(
         infos = checkpoint['infos']
         infos['start_epoch'] = infos['epoch']
         checkpoint_checked = True # this epoch is already checked
+    else:
+        logger.info('No checkpoint found! Training from the scratch')
         
     if opt.use_rl == 1 and opt.use_rl_after == 0:
         opt.use_rl_after = infos['epoch']

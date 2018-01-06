@@ -34,7 +34,7 @@ TEST_SEQ_PER_IMG?=20
 RNN_SIZE?=512
 
 PRINT_INTERVAL?=20
-MAX_PATIENCE?=5 # FOR EARLY STOPPING
+MAX_PATIENCE?=50 # FOR EARLY STOPPING
 SAVE_CHECKPOINT_FROM?=1
 
 MAX_EPOCHS?=200
@@ -142,7 +142,6 @@ TEST_OPT=--beam_size $(BEAM_SIZE) \
 	--test_seq_per_img $(TEST_SEQ_PER_IMG) \
 	--test_batch_size $(BATCH_SIZE) \
 	--loglevel $(LOGLEVEL) \
-	--output_logp 1 \
 	--result_file $@
 
 train: $(MODEL_DIR)/$(EXP_NAME)/$(subst $(space),$(noop),$(FEATS))_$(TRAIN_ID).pth
