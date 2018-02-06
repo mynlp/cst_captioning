@@ -7,7 +7,7 @@ Code for the video captioning methods from ["Consensus-based Sequence Training f
 * Python 2.7
 * Pytorch 0.2
 * [Microsoft COCO Caption Evaluation](https://github.com/tylin/coco-caption)
-* [CIDEr](https://github.com/ruotianluo/cider)
+* [CIDEr](https://github.com/plsang/cider)
 
 (Check out the `coco-caption` and `cider` projects into your working directory)
 
